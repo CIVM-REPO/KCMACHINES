@@ -1,4 +1,4 @@
-const STORAGE_KEY = "kc-machines-v27";
+const STORAGE_KEY = "kc-machines-v28-product-total";
 const EMPTY_PRODUCT = "EMPTY";
 
 const defaultProducts = [
@@ -39,68 +39,6 @@ let productOrder = new Map();
 let imageRefreshVersion = Date.now();
 const productColors = ["#46b8ff", "#35e79a", "#f8c45c", "#ef7b8c", "#b98cff", "#72dfdf", "#ff9d5c", "#a6f06f"];
 const monthNamesShort = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-const seedMonthlySales = {
-  "HI ENERGY": 325,
-  "AGUA AQUA": 236,
-  "LECHE DE FRESA": 185,
-  "COCA-COLA": 169,
-  "TE LIPTON": 95,
-  "SALVA COLA Y SHAMPAN": 82,
-  "MONSTER": 67,
-  "COCA-COLA ZERO": 57,
-  "PETIT CAJA": 46,
-  "PEPSI LIGHT": 46,
-  "SALUTARIS": 43,
-  "PEPSI": 38,
-  "JUGO PETIT": 24,
-  "ADRENALINE": 169,
-  "MOUNTAIN DEW": 0,
-  "ELOTITO Y MANI JAPONES": 169,
-  "CHURRO DIANA": 152,
-  "TOTIS": 110,
-  "LAYS GRANDE": 83,
-  "CERECITA Y GOMITA": 67,
-  "BABY": 64,
-  "CHETOS AZUL": 41,
-  "ELOTITO LIMON Y BACOA": 33,
-  "GALLETA PICNIC": 58,
-  "FLORENTINA": 48,
-  "CHOKI REGULAR": 46,
-  "QUAKER": 37
-};
-const legacyProductImages = {
-  "COCA-COLA": "assets/products/coca-cola.png",
-  "COCA-COLA ZERO": "assets/products/coca-cola-zero.png",
-  "PEPSI": "assets/products/pepsi.png",
-  "PEPSI LIGHT": "assets/products/pepsi-light.png",
-  "JUGO PETIT": "assets/products/jugo-petit.png",
-  "TE LIPTON": "assets/products/te-lipton.png",
-  "SALUTARIS": "assets/products/salutaris.png",
-  "AGUA AQUA": "assets/products/agua.png",
-  "HI ENERGY": "assets/products/hi-energy.png",
-  "ADRENALINE": "assets/products/adrenaline.png",
-  "MONSTER": "assets/products/monster.png",
-  "PETIT CAJA": "assets/products/petit-caja.png",
-  "SALVA COLA Y SHAMPAN": "assets/products/salva-cola-shampan.png",
-  "MOUNTAIN DEW": "assets/products/mountain-dew.png",
-  "LECHE DE FRESA": "assets/products/leche-fresa.png",
-  "CHURRO DIANA": "assets/products/churro-diana.png",
-  "LAYS GRANDE": "assets/products/lays-grande.png",
-  "CHETOS AZUL": "assets/products/chetos-azul.png",
-  "ELOTITO LIMON Y BACOA": "assets/products/elotito-limon-bacoa.png",
-  "ELOTITO Y MANI JAPONES": "assets/products/elotito-mani-japones.png",
-  "CERECITA Y GOMITA": "assets/products/cerecita-gomita.png",
-  "BABY": "assets/products/baby.png",
-  "TOTIS": "assets/products/totis.png",
-  "MINI CHOKI": "assets/products/mini-choki.png",
-  "PRINCIPE": "assets/products/principe.png",
-  "CHOKI REGULAR": "assets/products/choki-regular.png",
-  "CHIKI": "assets/products/chiki.png",
-  "QUAKER": "assets/products/quaker.png",
-  "SUSPIROS": "assets/products/suspiros.png",
-  "GALLETA PICNIC": "assets/products/galleta-picnic.png",
-  "FLORENTINA": "assets/products/florentina.png"
-};
 const baseProductLayout = {
   A01: "CHURRO DIANA",
   A02: "CHURRO DIANA",
@@ -225,6 +163,8 @@ function normalizeState(savedState) {
     machines: savedState.machines || [{ id: "kc-01", name: "KC Machines" }],
     activeMachineId: savedState.activeMachineId || "kc-01",
     products: normalizeProducts(savedState.products),
+    pendingProducts: Array.isArray(savedState.pendingProducts) ? normalizeProducts(savedState.pendingProducts) : null,
+    pendingProductsEffectiveMonth: savedState.pendingProductsEffectiveMonth || null,
     seedScenario: savedState.seedScenario || null
   };
 }
@@ -248,6 +188,34 @@ function syncProductCatalog() {
   productOrder = new Map(products.map((product, index) => [product.name, index]));
 }
 
+function applyPendingCatalogForDate(dateValue) {
+  if (!state.pendingProducts || !state.pendingProductsEffectiveMonth) return;
+  if (monthKey(dateValue) < state.pendingProductsEffectiveMonth) return;
+
+  state.products = normalizeProducts(state.pendingProducts);
+  state.pendingProducts = null;
+  state.pendingProductsEffectiveMonth = null;
+  syncProductCatalog();
+  saveState();
+}
+
+function catalogDraftProducts() {
+  return state.pendingProducts ? normalizeProducts(state.pendingProducts) : catalogSnapshot(products);
+}
+
+function catalogDraftEffectiveMonth() {
+  return state.pendingProductsEffectiveMonth || monthKey(firstDayNextMonth(visitDate.value));
+}
+
+function scheduleCatalogChange(nextProducts, message) {
+  const effectiveMonth = catalogDraftEffectiveMonth();
+  state.pendingProducts = normalizeProducts(nextProducts);
+  state.pendingProductsEffectiveMonth = effectiveMonth;
+  saveState();
+  renderProductsEditor();
+  showToast(`${message}. Se aplicara desde ${effectiveMonth}`);
+}
+
 function daysAgo(days) {
   const date = new Date();
   date.setDate(date.getDate() - days);
@@ -261,111 +229,24 @@ function dateToInputValue(date) {
   return `${year}-${month}-${day}`;
 }
 
-function buildSampleRecords() {
-  const firstVisit = buildVisitRecord(daysAgo(7), new Map(), 0);
-  const secondVisit = buildVisitRecord(daysAgo(4), stockMapFromRecord(firstVisit), 1);
-  const thirdVisit = buildVisitRecord(daysAgo(2), stockMapFromRecord(secondVisit), 2);
-
-  return [firstVisit, secondVisit, thirdVisit];
-}
-
-function buildSeededTestState() {
-  const records = [];
-  const monthClosures = [];
-  let previousStock = new Map();
-
-  for (let month = 1; month <= 12; month += 1) {
-    const monthKeyValue = `2026-${String(month).padStart(2, "0")}`;
-    const multiplier = 1 + ((month - 1) % 4) * 0.06;
-    const monthSales = products.reduce((map, product) => {
-      map.set(product.name, Math.round(Number(seedMonthlySales[product.name] || 0) * multiplier));
-      return map;
-    }, new Map());
-    const startRecord = buildSeededMonthRecord(`${monthKeyValue}-01`, previousStock, monthSales, true);
-    const soldRecord = buildSeededMonthRecord(`${monthKeyValue}-24`, stockMapFromRecord(startRecord), monthSales, false);
-
-    records.push(startRecord, soldRecord);
-    previousStock = stockMapFromRecord(soldRecord);
-
-    if (month < 12) {
-      const summary = accountingSummaryForRecords([startRecord, soldRecord]);
-      monthClosures.push({
-        month: monthKeyValue,
-        closedAt: `${monthKeyValue}-28`,
-        sourceDate: soldRecord.date,
-        totalSold: summary.totalSold,
-        productTotals: summary.productTotals,
-        totalRevenue: summary.totalRevenue,
-        totalCost: summary.totalCost,
-        profitability: summary.profitability,
-        cardSales: 0,
-        bankFee: 0,
-        floorFee: 0,
-        fuelTotal: 0,
-        grossProfit: summary.grossProfit,
-        openingStockNextMonth: recordNextStock(soldRecord)
-      });
-    }
-  }
-
-  return normalizeState({
-    records,
-    monthClosures,
-    yearClosures: [],
-    machines: [{ id: "kc-01", name: "KC Machines" }],
-    activeMachineId: "kc-01",
-    seedScenario: "xlsx-annual-2026"
-  });
-}
-
-function buildSeededMonthRecord(date, priorStock, monthlySales, isStockLoad) {
-  const productSlots = buildDefaultSlots().reduce((map, slot) => {
-    if (!isEmptyProduct(slot.product) && !map.has(slot.product)) map.set(slot.product, slot.code);
-    return map;
-  }, new Map());
-
-  return {
-    date,
-    fuelCost: 0,
-    slots: buildDefaultSlots().map((slot) => {
-      const previousStock = Number(priorStock.get(slot.code) || 0);
-      const isCapture = productSlots.get(slot.product) === slot.code;
-      const soldTarget = isCapture ? Number(monthlySales.get(slot.product) || 0) : 0;
-      const found = isStockLoad ? previousStock : 0;
-      const left = soldTarget;
-      const hasEntry = !isEmptyProduct(slot.product) && (isStockLoad || previousStock > 0 || left > 0);
-      const sold = hasEntry && isCapture ? Math.max(previousStock - found, 0) : 0;
-      const salesEntry = !isEmptyProduct(slot.product) && (isStockLoad || previousStock > 0);
-      const stockEntry = !isEmptyProduct(slot.product) && (isStockLoad || left > 0);
-
-      return {
-        code: slot.code,
-        product: slot.product,
-        previousProduct: slot.product,
-        color: productColor(slot.product),
-        price: productCatalogItem(slot.product)?.price ?? 0,
-        cost: productCatalogItem(slot.product)?.cost ?? 0,
-        previousStock,
-        found,
-        left,
-        sold,
-        hasEntry,
-        salesEntry,
-        stockEntry,
-        counted: isCapture,
-        salesCounted: isCapture,
-        stockCounted: isCapture
-      };
-    })
-  };
-}
-
 function stockMapFromRecord(record) {
-  return new Map(recordNextStock(record).map((slot) => [slot.slotCode || slot.code, Number(slot.stock || 0)]));
+  return new Map(recordNextStock(record).map((slot) => [slot.slotCode || slot.code || slot.product, Number(slot.stock || 0)]));
 }
 
-function stockSlotMapFromRecord(record) {
-  return new Map(recordNextStock(record).map((slot) => [slot.slotCode || slot.code, slot]));
+function productStockMapFromRecord(record) {
+  return new Map(recordNextStock(record).map((slot) => [slot.product, Number(slot.stock || 0)]));
+}
+
+function productStockEntryMapFromRecord(record) {
+  return new Map(recordNextStock(record).map((slot) => [slot.product, slot]));
+}
+
+function productStockMapFromYearClosure(closure) {
+  return new Map((closure?.openingStockNextYear || []).map((slot) => [slot.product, Number(slot.stock || 0)]));
+}
+
+function productStockEntryMapFromYearClosure(closure) {
+  return new Map((closure?.openingStockNextYear || []).map((slot) => [slot.product, slot]));
 }
 
 function buildSlotsSnapshot(slots) {
@@ -387,8 +268,8 @@ function buildSlotsSnapshot(slots) {
       cost: previousProductCost(slot),
       previousPrice: previousProductPrice(slot),
       previousCost: previousProductCost(slot),
-      currentPrice: productCatalogItem(slot.product)?.price ?? 0,
-      currentCost: productCatalogItem(slot.product)?.cost ?? 0,
+      currentPrice: Number(slot.currentPrice ?? productCatalogItem(slot.product)?.price ?? 0),
+      currentCost: Number(slot.currentCost ?? productCatalogItem(slot.product)?.cost ?? 0),
       previousStock,
       found: Number(slot.found || 0),
       left: Number(slot.left || 0),
@@ -423,13 +304,14 @@ function buildSalesMovements(slotsSnapshot) {
 }
 
 function buildNextStock(slotsSnapshot) {
+  const seen = new Set();
+
   return slotsSnapshot
     .filter((slot) => !isEmptyProduct(slot.product))
     .filter((slot) => Boolean(slot.stockEntry) || Number(slot.left || 0) > 0)
     .filter((slot, index) => isCountedStockRecordSlot({ slots: slotsSnapshot }, slot, index))
+    .filter((slot) => !seen.has(slot.product) && seen.add(slot.product))
     .map((slot) => ({
-      slotCode: slot.code,
-      code: slot.code,
       product: slot.product,
       stock: Number(slot.left || 0),
       price: Number(slot.currentPrice ?? productCatalogItem(slot.product)?.price ?? 0),
@@ -460,7 +342,7 @@ function recordNextStock(record) {
       stock: Number(slot.stock ?? slot.left ?? 0),
       price: Number(slot.price || 0),
       cost: Number(slot.cost || 0)
-    })).filter((slot) => slot.slotCode && !isEmptyProduct(slot.product));
+    })).filter((slot) => !isEmptyProduct(slot.product));
   }
 
   return buildNextStock(record?.slotsSnapshot || record?.slots || []);
@@ -471,14 +353,6 @@ function latestYearClosureBefore(date) {
   return [...state.yearClosures]
     .filter((closure) => Number(closure.year) < activeYear)
     .sort((a, b) => b.year.localeCompare(a.year))[0];
-}
-
-function stockMapFromYearClosure(closure) {
-  return new Map((closure?.openingStockNextYear || []).map((slot) => [slot.slotCode || slot.code, Number(slot.stock || 0)]));
-}
-
-function stockSlotMapFromYearClosure(closure) {
-  return new Map((closure?.openingStockNextYear || []).map((slot) => [slot.slotCode || slot.code, slot]));
 }
 
 function buildVisitRecord(date, previousStock, visitIndex) {
@@ -525,6 +399,8 @@ function resetStateData() {
   state.records = [];
   state.monthClosures = [];
   state.yearClosures = [];
+  state.pendingProducts = null;
+  state.pendingProductsEffectiveMonth = null;
   state.seedScenario = null;
   showAllHistory = false;
   activeMonthCard = null;
@@ -563,12 +439,12 @@ function productColor(productName) {
   return productColors[index % productColors.length];
 }
 
-function productOptions(selectedProduct) {
+function productOptionsFromCatalog(selectedProduct, catalogProducts = products) {
   const emptyOption = `<option value="${EMPTY_PRODUCT}"${selectedProduct === EMPTY_PRODUCT ? " selected" : ""}>EMPTY</option>`;
-  const knownProducts = products.map((product) => `
+  const knownProducts = catalogProducts.map((product) => `
     <option value="${product.name}"${product.name === selectedProduct ? " selected" : ""}>${product.name}</option>
   `).join("");
-  const missingSelected = selectedProduct && selectedProduct !== EMPTY_PRODUCT && !productCatalogItem(selectedProduct)
+  const missingSelected = selectedProduct && selectedProduct !== EMPTY_PRODUCT && !productCatalogItemFrom(catalogProducts, selectedProduct)
     ? `<option value="${selectedProduct}" selected>${selectedProduct}</option>`
     : "";
 
@@ -577,6 +453,20 @@ function productOptions(selectedProduct) {
 
 function productCatalogItem(productName) {
   return products[productOrder.get(productName)] || null;
+}
+
+function productCatalogItemFrom(catalogProducts, productName) {
+  return (catalogProducts || []).find((product) => product.name === productName) || null;
+}
+
+function catalogSnapshot(sourceProducts = products) {
+  return normalizeProducts(sourceProducts).map((product) => ({ ...product }));
+}
+
+function catalogForRecord(record) {
+  return Array.isArray(record?.catalogSnapshot) && record.catalogSnapshot.length
+    ? catalogSnapshot(record.catalogSnapshot)
+    : catalogSnapshot(products);
 }
 
 function normalizeProductName(value) {
@@ -595,10 +485,6 @@ function escapeHtml(value) {
 function productImageUrl(productName) {
   if (isEmptyProduct(productName)) return "";
   return `assets/products/${encodeURIComponent(productName)}.png?v=${imageRefreshVersion}`;
-}
-
-function legacyProductImageUrl(productName) {
-  return "";
 }
 
 function productImageScaleClass(productName) {
@@ -634,15 +520,13 @@ function visualImageScale(productName, slotCount) {
 
 function productVisualMarkup(productName) {
   const imageUrl = productImageUrl(productName);
-  const fallbackUrl = legacyProductImageUrl(productName);
   const shape = productShape(productName);
-  const fallbackAttribute = fallbackUrl && fallbackUrl !== imageUrl ? ` data-fallback="${fallbackUrl}"` : "";
-  const imageError = "if(this.dataset.fallback&&!this.dataset.usedFallback){this.dataset.usedFallback='true';this.src=this.dataset.fallback;}else{this.parentElement.classList.remove('has-image');this.remove();}";
+  const imageError = "this.parentElement.classList.remove('has-image');this.remove();";
 
   return `
     <span class="product-visual ${shape}${imageUrl ? " has-image" : ""}${productImageScaleClass(productName)}" aria-hidden="true">
       <span></span>
-      ${imageUrl ? `<img src="${imageUrl}"${fallbackAttribute} alt="" loading="lazy" onerror="${imageError}">` : ""}
+      ${imageUrl ? `<img src="${imageUrl}" alt="" loading="lazy" onerror="${imageError}">` : ""}
     </span>
   `;
 }
@@ -698,11 +582,11 @@ function slotHasStockEntry(slot) {
 }
 
 function previousProductPrice(slot) {
-  return productCatalogItem(previousProductForSlot(slot))?.price ?? Number(slot?.previousPrice ?? slot?.price ?? 0);
+  return Number(slot?.previousPrice ?? slot?.price ?? productCatalogItem(previousProductForSlot(slot))?.price ?? 0);
 }
 
 function previousProductCost(slot) {
-  return productCatalogItem(previousProductForSlot(slot))?.cost ?? Number(slot?.previousCost ?? slot?.cost ?? 0);
+  return Number(slot?.previousCost ?? slot?.cost ?? productCatalogItem(previousProductForSlot(slot))?.cost ?? 0);
 }
 
 function buildDefaultSlots() {
@@ -781,38 +665,40 @@ function previousStockMap(date) {
   const previous = getPreviousRecord(date);
   const map = new Map();
 
-  buildDefaultSlots().forEach((slot) => map.set(slot.code, 0));
   if (previous) {
-    recordNextStock(previous).forEach((slot) => map.set(slot.slotCode || slot.code, Number(slot.stock || 0)));
+    productStockMapFromRecord(previous).forEach((stock, product) => map.set(product, stock));
   } else {
-    stockMapFromYearClosure(latestYearClosureBefore(date)).forEach((stock, code) => map.set(code, stock));
+    productStockMapFromYearClosure(latestYearClosureBefore(date)).forEach((stock, product) => map.set(product, stock));
   }
 
   return map;
 }
 
 function loadDate(date) {
+  applyPendingCatalogForDate(date);
   const existing = getRecord(date);
+  const visitCatalog = catalogForRecord(existing);
   const previousRecord = getPreviousRecord(date);
   const previousYearClosure = !previousRecord ? latestYearClosureBefore(date) : null;
-  const previousStockSlots = previousRecord ? stockSlotMapFromRecord(previousRecord) : new Map();
-  const previousYearStockSlots = stockSlotMapFromYearClosure(previousYearClosure);
   const previousStock = previousStockMap(date);
+  const previousStockEntries = previousRecord
+    ? productStockEntryMapFromRecord(previousRecord)
+    : productStockEntryMapFromYearClosure(previousYearClosure);
+  const defaultSlots = buildDefaultSlots();
+  const existingSlots = existing?.slots || existing?.slotsSnapshot || [];
+  const previousSlots = previousRecord?.slots || previousRecord?.slotsSnapshot || [];
+  const hasPreviousStock = [...previousStock.values()].some((stock) => Number(stock || 0) > 0);
+  const isFirstDraft = !existing && !previousRecord && !hasPreviousStock;
 
-  currentSlots = buildDefaultSlots().map((slot) => {
-    const existingSlots = existing?.slots || existing?.slotsSnapshot || [];
-    const previousSlots = previousRecord?.slots || previousRecord?.slotsSnapshot || [];
+  currentSlots = defaultSlots.map((slot) => {
     const savedSlot = existingSlots.find((item) => item.code === slot.code);
     const previousSlot = previousSlots.find((item) => item.code === slot.code);
-    const previousStockSlot = previousStockSlots.get(slot.code);
-    const previousYearSlot = previousYearStockSlots.get(slot.code);
-    const previousProduct = savedSlot?.previousProduct || previousStockSlot?.product || previousSlot?.product || previousYearSlot?.product || slot.product;
-    const assignedProduct = savedSlot?.product || previousProduct;
-    const previousPrice = savedSlot?.price ?? previousStockSlot?.price ?? productCatalogItem(previousProduct)?.price ?? previousSlot?.price ?? previousYearSlot?.price ?? 0;
-    const previousCost = savedSlot?.cost ?? previousStockSlot?.cost ?? productCatalogItem(previousProduct)?.cost ?? previousSlot?.cost ?? previousYearSlot?.cost ?? 0;
-    const baseStock = previousStock.get(slot.code) || 0;
-    const hasPreviousStock = [...previousStock.values()].some((stock) => Number(stock || 0) > 0);
-    const isFirstDraft = !existing && !previousRecord && !hasPreviousStock;
+    const assignedProduct = savedSlot?.product || previousSlot?.product || slot.product;
+    const previousProduct = savedSlot?.previousProduct || assignedProduct;
+    const currentCatalogItem = productCatalogItemFrom(visitCatalog, assignedProduct);
+    const previousCatalogItem = productCatalogItemFrom(visitCatalog, previousProduct);
+    const previousPrice = savedSlot?.previousPrice ?? savedSlot?.price ?? previousCatalogItem?.price ?? previousSlot?.previousPrice ?? previousSlot?.price ?? 0;
+    const previousCost = savedSlot?.previousCost ?? savedSlot?.cost ?? previousCatalogItem?.cost ?? previousSlot?.previousCost ?? previousSlot?.cost ?? 0;
 
     return {
       ...slot,
@@ -820,20 +706,37 @@ function loadDate(date) {
       previousProduct,
       previousPrice,
       previousCost,
+      currentPrice: savedSlot?.currentPrice ?? currentCatalogItem?.price ?? 0,
+      currentCost: savedSlot?.currentCost ?? currentCatalogItem?.cost ?? 0,
       color: productColor(assignedProduct),
-      previousStock: baseStock,
+      previousStock: savedSlot ? Number(savedSlot.previousStock || 0) : 0,
       found: savedSlot ? Number(savedSlot.found || 0) : 0,
-      left: savedSlot ? Number(savedSlot.left || 0) : isFirstDraft ? initialRefillStock(buildDefaultSlots().findIndex((item) => item.code === slot.code)) : 0,
+      left: savedSlot ? Number(savedSlot.left || 0) : isFirstDraft ? initialRefillStock(defaultSlots.findIndex((item) => item.code === slot.code)) : 0,
       sold: savedSlot ? Number(savedSlot.sold || 0) : 0,
-      hasEntry: Boolean(savedSlot?.hasEntry) || (Boolean(savedSlot) && Number(savedSlot.previousStock || baseStock || 0) > 0),
+      hasEntry: Boolean(savedSlot?.hasEntry) || (Boolean(savedSlot) && Number(savedSlot.previousStock || 0) > 0),
       foundCaptured: savedSlot ? Boolean(savedSlot.foundCaptured ?? savedSlot.hasEntry) : false,
-      salesEntry: savedSlot ? Boolean(savedSlot.salesEntry ?? savedSlot.hasEntry) : baseStock > 0,
+      salesEntry: savedSlot ? Boolean(savedSlot.salesEntry ?? savedSlot.hasEntry) : false,
       stockEntry: savedSlot ? Boolean(savedSlot.stockEntry ?? savedSlot.hasEntry) : isFirstDraft,
       counted: savedSlot?.counted,
       salesCounted: savedSlot?.salesCounted,
       stockCounted: savedSlot?.stockCounted
     };
   });
+
+  if (!existing) {
+    previousStock.forEach((stock, product) => {
+      if (isEmptyProduct(product) || Number(stock || 0) <= 0) return;
+      const slot = currentSlots.find((item) => item.product === product);
+      if (!slot) return;
+      const stockEntry = previousStockEntries.get(product);
+      slot.previousProduct = product;
+      slot.previousStock = Number(stock || 0);
+      slot.previousPrice = Number(stockEntry?.price ?? productCatalogItem(product)?.price ?? 0);
+      slot.previousCost = Number(stockEntry?.cost ?? productCatalogItem(product)?.cost ?? 0);
+      slot.salesEntry = true;
+      slot.hasEntry = true;
+    });
+  }
 
   ensureCaptureSlots();
   syncAllDuplicateEntryValues();
@@ -857,12 +760,9 @@ function soldForSlot(slot) {
   return Math.max(Number(slot.previousStock || 0) - Number(slot.found || 0), 0);
 }
 
-function soldForRecordSlot(record, slot, index) {
-  if (!isCountedRecordSlot(record, slot, index)) return 0;
-  if (isEmptyProduct(slot.previousProduct || slot.product)) return 0;
-  const previousStock = Number(slot.previousStock || 0);
-  if (!recordSlotHasSalesEntry(slot)) return 0;
-  return Math.max(previousStock - Number(slot.found || 0), 0);
+function confirmedSoldForSlot(slot) {
+  if (slotHasPreviousStock(slot) && !Boolean(slot.foundCaptured)) return 0;
+  return soldForSlot(slot);
 }
 
 function hasStockMismatch(slot) {
@@ -982,12 +882,6 @@ function ensureCaptureSlots() {
     });
 }
 
-function syncProductEntryValues(productName) {
-  currentSlots
-    .filter((slot) => slot.product === productName || previousProductForSlot(slot) === productName)
-    .forEach(syncSlotEntryValues);
-}
-
 function syncSlotEntryValues(referenceSlot) {
   const salesGroup = salesGroupForSlot(referenceSlot);
   const salesPrimary = captureSalesSlotForSlot(referenceSlot);
@@ -1053,31 +947,14 @@ function visualGroupWeight(group, rowSize) {
   return 2.55;
 }
 
-function updateVisualGroupProduct(codes, productName) {
-  codes.forEach((code) => {
-    const slot = findSlot(code);
-    if (!slot) return;
-
-    slot.product = productName;
-    slot.color = productColor(productName);
-    slot.counted = false;
-    if (isEmptyProduct(productName)) {
-      slot.found = 0;
-      slot.left = 0;
-      slot.hasEntry = false;
-      slot.sold = 0;
-    }
-  });
-}
-
-function slotCodeSelectorMarkup(groupSlots, locked) {
+function slotCodeSelectorMarkup(groupSlots, locked, catalogProducts) {
   return `
     <div class="slot-code-list">
       ${groupSlots.map((groupSlot) => `
         <label class="slot-code slot-product-select-label" aria-label="Producto en ${groupSlot.code}">
           <span>${groupSlot.code}</span>
           <select class="slot-product-select" data-slot-product="${groupSlot.code}"${locked ? " disabled" : ""}>
-            ${productOptions(groupSlot.product)}
+            ${productOptionsFromCatalog(groupSlot.product, catalogProducts)}
           </select>
         </label>
       `).join("")}
@@ -1090,6 +967,7 @@ function buildMachine() {
   machineTarget.innerHTML = "";
   let slotIndex = 0;
   const locked = isMonthClosed(visitDate.value);
+  const visitCatalog = catalogForRecord(getRecord(visitDate.value));
 
   rowSizes.forEach((size) => {
     const rowSlots = currentSlots.slice(slotIndex, slotIndex + size);
@@ -1104,9 +982,10 @@ function buildMachine() {
       const slotData = visualSlotForGroup(group);
       const groupCodes = group.slots.map((slot) => slot.code);
       const mergedEntry = group.slots.length > 1;
+      const orientationEntry = !isPrimaryStockSlot(slotData) && !isPrimarySalesSlot(slotData);
       const emptyEntry = !slotCanCapture(slotData);
       const slot = document.createElement("div");
-      slot.className = `slot${locked ? " locked-slot" : ""}${mergedEntry ? " merged-slot" : ""}${emptyEntry ? " empty-slot" : ""}${hasStockMismatch(slotData) ? " stock-error" : ""}`;
+      slot.className = `slot${locked ? " locked-slot" : ""}${mergedEntry ? " merged-slot" : ""}${orientationEntry ? " duplicate-slot" : ""}${emptyEntry ? " empty-slot" : ""}${hasStockMismatch(slotData) ? " stock-error" : ""}`;
       slot.tabIndex = locked || emptyEntry ? -1 : 0;
       slot.setAttribute("role", "button");
       slot.setAttribute("aria-disabled", String(locked || emptyEntry));
@@ -1117,12 +996,14 @@ function buildMachine() {
       slot.style.setProperty("--image-scale", visualImageScale(slotData.product, group.slots.length));
       slot.style.setProperty("--slot-color", slotData.color);
       slot.innerHTML = `
-        ${slotCodeSelectorMarkup(group.slots, locked)}
+        ${slotCodeSelectorMarkup(group.slots, locked, visitCatalog)}
         ${productVisualMarkup(slotData.product)}
         ${slotData.product !== previousProductForSlot(slotData) && slotHasPreviousStock(slotData) ? `<span class="slot-previous-product">${previousProductForSlot(slotData)}</span>` : ""}
         <span class="slot-values" aria-label="Cantidades">
-          <span class="slot-value found" title="Encontre"><small>Encontre</small><strong>${slotData.found}</strong></span>
-          <span class="slot-value left" title="Dejo"><small>Dejo</small><strong>${slotData.left}</strong></span>
+          ${orientationEntry
+            ? `<span class="slot-value found" title="Referencia"><small>Ver total</small><strong></strong></span>`
+            : `<span class="slot-value found" title="Encontre"><small>Encontre</small><strong>${slotData.found}</strong></span>
+              <span class="slot-value left" title="Dejo"><small>Dejo</small><strong>${slotData.left}</strong></span>`}
         </span>
       `;
       slot.addEventListener("click", () => {
@@ -1154,15 +1035,23 @@ function updateSlotProduct(code, productName) {
   const slot = findSlot(code);
   if (!slot || isMonthClosed(visitDate.value)) return false;
   if (slot.product === productName) return true;
+  const visitCatalog = catalogForRecord(getRecord(visitDate.value));
+  const nextCatalogItem = isEmptyProduct(productName) ? null : productCatalogItemFrom(visitCatalog, productName);
+  if (!isEmptyProduct(productName) && !nextCatalogItem) {
+    showToast("Ese producto no existia cuando se guardo esta visita");
+    return false;
+  }
 
   if (slotNeedsFoundCapture(slot)) {
-    showToast(`Primero indica cuanto encontraste en ${slot.code}`);
+    showToast(`Primero indica cuanto encontraste de ${previousProductForSlot(slot)}`);
     openSlotDialog(slot.code);
     return false;
   }
 
   slot.product = productName;
   slot.color = productColor(productName);
+  slot.currentPrice = nextCatalogItem?.price ?? 0;
+  slot.currentCost = nextCatalogItem?.cost ?? 0;
   slot.counted = false;
   if (isEmptyProduct(productName)) {
     slot.left = 0;
@@ -1186,12 +1075,14 @@ function updateSummary() {
   const date = visitDate.value;
   const existing = Boolean(getRecord(date));
   const locked = isMonthClosed(date);
-  const pendingTotal = currentSlots.reduce((sum, slot) => sum + soldForSlot(slot), 0);
+  const confirmedTotal = currentSlots.reduce((sum, slot) => sum + confirmedSoldForSlot(slot), 0);
   const pendingCaptureCount = pendingFoundCaptureSlots().length;
   const previous = getPreviousRecord(date);
   const previousYearClosure = !previous ? latestYearClosureBefore(date) : null;
 
-  pendingSales.textContent = `${pendingTotal} unidades`;
+  pendingSales.textContent = pendingCaptureCount > 0
+    ? `${confirmedTotal} confirmadas · ${pendingCaptureCount} pendientes`
+    : `${confirmedTotal} unidades`;
   lastUpdateLabel.textContent = previous
     ? `Stock anterior: ${formatDate(previous.date)}`
     : previousYearClosure
@@ -1215,7 +1106,7 @@ function updateSummary() {
   if (mismatchCount > 0) {
     stockStatus.textContent = `${mismatchCount} espacio(s) tienen más unidades encontradas que el stock anterior. Revisa esos productos.`;
   } else if (pendingCaptureCount > 0) {
-    stockStatus.textContent = `${pendingCaptureCount} espacio(s) tienen stock anterior pendiente. Indica cuanto encontraste antes de guardar o cambiar producto.`;
+    stockStatus.textContent = `${pendingCaptureCount} producto(s) tienen stock anterior pendiente. Indica cuanto encontraste antes de guardar o cambiar producto.`;
   }
   updateStock.hidden = existing || locked;
   saveDateChanges.hidden = !existing || locked;
@@ -1230,7 +1121,7 @@ function productTotals() {
   currentSlots.forEach((slot) => {
     const salesProduct = previousProductForSlot(slot);
     if (isEmptyProduct(salesProduct)) return;
-    const sold = soldForSlot(slot);
+    const sold = confirmedSoldForSlot(slot);
     const current = totals.get(salesProduct) || {
       product: salesProduct,
       sold: 0,
@@ -1493,8 +1384,10 @@ function productEditorRow(product, index) {
 }
 
 function renderProductsEditor() {
-  productsTable.innerHTML = products.length
-    ? products.map(productEditorRow).join("")
+  const draftProducts = catalogDraftProducts();
+  const effectiveMonth = catalogDraftEffectiveMonth();
+  productsTable.innerHTML = draftProducts.length
+    ? `<div class="products-empty">Cambios de catalogo programados para ${effectiveMonth}.</div>${draftProducts.map(productEditorRow).join("")}`
     : `<div class="products-empty">No hay productos guardados.</div>`;
 
   productsTable.querySelectorAll("[data-product-save]").forEach((button) => {
@@ -1518,7 +1411,8 @@ function applyCatalogChange(message) {
 
 function saveProductEdit(index) {
   const row = productsTable.querySelector(`[data-product-index="${index}"]`);
-  const current = products[index];
+  const draftProducts = catalogDraftProducts();
+  const current = draftProducts[index];
   if (!row || !current) return;
 
   const oldName = current.name;
@@ -1528,7 +1422,7 @@ function saveProductEdit(index) {
     cost: Number(row.querySelector(".product-cost-edit").value || 0),
     price: Number(row.querySelector(".product-price-edit").value || 0)
   };
-  const duplicate = products.some((product, productIndex) => productIndex !== index && product.name === nextName);
+  const duplicate = draftProducts.some((product, productIndex) => productIndex !== index && product.name === nextName);
   if (!nextName) {
     showToast("El producto necesita nombre");
     return;
@@ -1538,44 +1432,8 @@ function saveProductEdit(index) {
     return;
   }
 
-  products[index] = nextProduct;
-
-  if (oldName !== nextName) {
-    currentSlots.forEach((slot) => {
-      if (slot.product === oldName) {
-        slot.product = nextName;
-        slot.color = productColor(nextName);
-      }
-    });
-  }
-  applyProductEditToOpenRecords(oldName, nextProduct);
-
-  applyCatalogChange("Producto actualizado");
-}
-
-function applyProductEditToOpenRecords(oldName, nextProduct) {
-  state.records.forEach((record) => {
-    if (isMonthClosed(record.date)) return;
-
-    const recordSlots = record.slots || record.slotsSnapshot || [];
-    recordSlots.forEach((slot) => {
-      if (slot.product === oldName || slot.product === nextProduct.name) {
-        slot.product = nextProduct.name;
-      }
-      if (slot.previousProduct === oldName || slot.previousProduct === nextProduct.name) {
-        slot.previousProduct = nextProduct.name;
-      }
-      if (slot.product !== nextProduct.name && slot.previousProduct !== nextProduct.name) return;
-      slot.color = productColor(nextProduct.name);
-      slot.price = nextProduct.price;
-      slot.cost = nextProduct.cost;
-    });
-    record.slots = recordSlots;
-    record.slotsSnapshot = recordSlots;
-    record.nextStock = recordNextStock(record).map((slot) => (
-      slot.product === oldName ? { ...slot, product: nextProduct.name, price: nextProduct.price, cost: nextProduct.cost } : slot
-    ));
-  });
+  draftProducts[index] = nextProduct;
+  scheduleCatalogChange(draftProducts, "Producto actualizado");
 }
 
 function resetSlotToEmpty(slot) {
@@ -1590,37 +1448,36 @@ function resetSlotToEmpty(slot) {
 }
 
 function deleteProduct(index) {
-  const product = products[index];
+  const draftProducts = catalogDraftProducts();
+  const product = draftProducts[index];
   if (!product) return;
   const confirmed = window.confirm(`Seguro que quieres eliminar ${product.name}?`);
   if (!confirmed) return;
 
-  products.splice(index, 1);
-  currentSlots.forEach((slot) => {
-    if (slot.product === product.name) resetSlotToEmpty(slot);
-  });
-  applyCatalogChange("Producto eliminado");
+  draftProducts.splice(index, 1);
+  scheduleCatalogChange(draftProducts, "Producto eliminado");
 }
 
 function addProduct(event) {
   event.preventDefault();
+  const draftProducts = catalogDraftProducts();
   const name = normalizeProductName(productNameInput.value);
   if (!name) {
     showToast("Escribe el nombre del producto");
     return;
   }
-  if (productCatalogItem(name)) {
+  if (productCatalogItemFrom(draftProducts, name)) {
     showToast("Ese producto ya existe");
     return;
   }
 
-  products.push({
+  draftProducts.push({
     name,
     cost: Number(productCostInput.value || 0),
     price: Number(productPriceInput.value || 0)
   });
   productForm.reset();
-  applyCatalogChange("Producto agregado al final");
+  scheduleCatalogChange(draftProducts, "Producto agregado al final");
 }
 
 function summaryFromClosure(closure) {
@@ -2268,10 +2125,12 @@ function handleSlotInputKeydown(event) {
 
 function currentRecord() {
   const slotsSnapshot = buildSlotsSnapshot(currentSlots);
+  const existing = getRecord(visitDate.value);
 
   return {
     date: visitDate.value,
     fuelCost: Number(fuelInput.value || 0),
+    catalogSnapshot: catalogForRecord(existing),
     slots: slotsSnapshot,
     slotsSnapshot,
     salesMovements: buildSalesMovements(slotsSnapshot),
@@ -2284,8 +2143,8 @@ function validateRequiredCaptures() {
   if (!pendingSlots.length) return true;
 
   const firstSlot = pendingSlots[0];
-  stockStatus.textContent = `${pendingSlots.length} espacio(s) tienen stock anterior pendiente. Indica cuanto encontraste antes de guardar.`;
-  showToast(`Falta indicar cuanto encontraste en ${firstSlot.code}`);
+  stockStatus.textContent = `${pendingSlots.length} producto(s) tienen stock anterior pendiente. Indica cuanto encontraste antes de guardar.`;
+  showToast(`Falta indicar cuanto encontraste de ${previousProductForSlot(firstSlot)}`);
   openSlotDialog(firstSlot.code);
   return false;
 }

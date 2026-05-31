@@ -325,10 +325,11 @@ h2 {
 .accounting-view {
   display: grid;
   min-height: calc(100vh - 126px);
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(7, 16, 20, 0.84);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .accounting-view[hidden] {
@@ -338,10 +339,11 @@ h2 {
 .products-view {
   display: grid;
   min-height: calc(100vh - 126px);
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(7, 16, 20, 0.84);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .products-view[hidden] {
@@ -351,15 +353,17 @@ h2 {
 .products-editor-panel {
   display: grid;
   gap: 14px;
+  min-width: 0;
   padding: 20px;
   border-top: 1px solid var(--line);
 }
 
 .product-form {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) 110px 110px auto;
+  grid-template-columns: minmax(0, 1fr) minmax(88px, 110px) minmax(88px, 110px) auto;
   gap: 10px;
   align-items: end;
+  min-width: 0;
 }
 
 .product-form label,
@@ -386,13 +390,15 @@ h2 {
 .products-table {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 .product-editor-row {
   display: grid;
-  grid-template-columns: 44px minmax(190px, 1fr) 105px 105px auto;
+  grid-template-columns: 44px minmax(0, 1fr) minmax(86px, 105px) minmax(86px, 105px) auto;
   gap: 10px;
   align-items: end;
+  min-width: 0;
   padding: 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
@@ -443,6 +449,7 @@ h2 {
 .accounting-dashboard {
   display: grid;
   gap: 14px;
+  min-width: 0;
   padding: 20px;
   border-top: 1px solid var(--line);
 }
@@ -450,6 +457,7 @@ h2 {
 .accounting-chart-panel {
   display: grid;
   gap: 12px;
+  min-width: 0;
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -463,10 +471,12 @@ h2 {
   grid-template-columns: minmax(0, 1fr) minmax(260px, 1fr);
   gap: 14px;
   align-items: stretch;
+  min-width: 0;
 }
 
 .accounting-chart {
   position: relative;
+  min-width: 0;
   min-height: 220px;
   border: 1px solid rgba(255, 255, 255, 0.075);
   border-radius: 8px;
@@ -657,6 +667,7 @@ h2 {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 12px;
+  min-width: 0;
 }
 
 .year-archive {
@@ -1637,11 +1648,13 @@ input {
 
 .slot-dialog {
   width: min(410px, calc(100vw - 28px));
+  max-height: calc(100dvh - 20px);
   border: 1px solid rgba(53, 231, 154, 0.28);
   border-radius: 8px;
   padding: 0;
   background: #071216;
   color: var(--text);
+  overflow: hidden;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
 }
 
@@ -1653,6 +1666,8 @@ input {
 .slot-dialog form {
   display: grid;
   gap: 14px;
+  max-height: calc(100dvh - 20px);
+  overflow: auto;
   padding: 18px;
 }
 
@@ -2121,6 +2136,17 @@ input {
 }
 
 @media (max-width: 760px) {
+  html,
+  body {
+    overflow-x: hidden;
+  }
+
+  .accounting-view,
+  .products-view {
+    min-height: auto;
+    border-radius: 8px;
+  }
+
   .accounting-dashboard,
   .chart-dashboard,
   .month-card-cover,
@@ -2133,16 +2159,27 @@ input {
 
   .accounting-dashboard,
   .products-editor-panel {
-    padding: 14px;
+    gap: 12px;
+    padding: 10px;
   }
 
   .product-editor-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
+    width: 100%;
+  }
+
+  .product-save-button,
+  .product-delete-button,
+  .product-form .save-date-button,
+  .close-actions button,
+  .copy-sales-column,
+  .month-close-button {
+    width: 100%;
   }
 
   .accounting-chart-panel {
-    padding: 12px;
+    padding: 10px;
   }
 
   .chart-dashboard {
@@ -2240,11 +2277,22 @@ input {
   }
 
   .split-title {
+    display: grid;
+    grid-template-columns: 1fr;
     align-items: stretch;
+  }
+
+  .split-title .top-action {
+    width: 100%;
   }
 
   .map-header {
     padding: 12px;
+  }
+
+  .accounting-view .map-header,
+  .products-view .map-header {
+    gap: 10px;
   }
 
   .date-control {
@@ -2526,16 +2574,39 @@ input {
     grid-template-columns: 1fr;
   }
 
+  .close-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
   .year-month-grid {
     grid-template-columns: 1fr 1fr;
   }
 
   .slot-dialog {
     width: calc(100vw - 18px);
+    max-height: calc(100dvh - 12px);
   }
 
   .slot-dialog form {
+    max-height: calc(100dvh - 12px);
     padding: 14px;
+  }
+
+  .dialog-head {
+    gap: 10px;
+  }
+
+  .dialog-head h2 {
+    font-size: 16px;
+    line-height: 1.18;
+    overflow-wrap: anywhere;
+  }
+
+  .previous-stock,
+  .dialog-result {
+    font-size: 12px;
+    line-height: 1.35;
   }
 
   .dialog-inputs {
@@ -2544,6 +2615,59 @@ input {
 
   .slot-dialog menu {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .accounting-dashboard,
+  .products-editor-panel {
+    padding: 8px;
+  }
+
+  .accounting-chart-panel,
+  .product-form,
+  .product-editor-row {
+    padding: 10px;
+  }
+
+  .product-editor-row {
+    gap: 8px;
+  }
+
+  .product-editor-order {
+    min-height: 32px;
+  }
+
+  .product-editor-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .accounting-metrics div,
+  .close-preview div {
+    min-height: 66px;
+    padding: 10px;
+  }
+
+  .accounting-metrics strong,
+  .close-preview strong {
+    font-size: 18px;
+  }
+
+  .month-products {
+    max-height: 210px;
+  }
+
+  .year-month-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .slot-dialog {
+    width: calc(100vw - 10px);
+  }
+
+  .slot-dialog form {
+    gap: 10px;
+    padding: 10px;
   }
 }
 
