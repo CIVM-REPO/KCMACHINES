@@ -1026,8 +1026,7 @@ function visualGroupsForRow(rowSlots) {
     const previousGroup = groups[groups.length - 1];
     const canMergeWithPrevious = previousGroup
       && !isEmptyProduct(slot.product)
-      && previousGroup.product === slot.product
-      && previousGroup.previousProduct === previousProductForSlot(slot);
+      && previousGroup.product === slot.product;
 
     if (canMergeWithPrevious) {
       previousGroup.slots.push(slot);
