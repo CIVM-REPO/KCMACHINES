@@ -1,0 +1,87 @@
+INSTRUCCIONES PARA NUEVO CHAT / NUEVO AGENTE
+
+Objetivo:
+Orientarte rapidamente dentro del proyecto KC MACHINE SELLS CONTROL sin depender de la conversacion original.
+
+Proyecto:
+`C:\Users\DESARROLLO\Desktop\CODEX\KC-MACHINE SELLS CONTROL`
+
+Repositorio remoto:
+`https://github.com/CIVM-REPO/KCMACHINES`
+
+Primero lee estos archivos, en este orden:
+
+1. `agentes/handoff/lectura-rapida.txt`
+   Resumen corto del estado actual y decision recomendada.
+
+2. `agentes/00-indice.txt`
+   Mapa de la carpeta `agentes`.
+
+3. `agentes/arquitectura/problema-contabilidad-espacios.txt`
+   Explica el dilema central: espacios fisicos vs captura visual vs contabilidad.
+
+4. `agentes/arquitectura/modelo-contable-recomendado.txt`
+   Describe el modelo recomendado basado en `salesMovements`.
+
+5. `agentes/migracion/plan-sales-movements.txt`
+   Plan de migracion sugerido.
+
+6. `agentes/pruebas/matriz-contabilidad.txt`
+   Casos manuales que deben usarse para validar.
+
+Despues revisa el codigo actual:
+- `script.js`
+- `index.html`
+- `styles.css`
+
+Contexto esencial:
+La app es una web estatica para controlar una vending machine. Actualmente guarda datos en `localStorage`.
+
+La zona delicada es la contabilidad:
+- La venta debe pertenecer al producto anterior (`previousProduct`).
+- El stock futuro debe pertenecer al producto actual (`product`).
+- La posicion fisica solo debe servir para comparar stock anterior contra encontrado.
+- La vista puede fusionar productos repetidos, pero eso no debe afectar la contabilidad.
+
+Decision recomendada:
+No seguir parchando la contabilidad basada en slots.
+Crear una capa explicita de movimientos contables:
+
+`salesMovements`
+
+Y una capa separada de stock futuro:
+
+`nextStock`
+
+Idea de registro futuro:
+
+record = {
+  date,
+  fuelCost,
+  slotsSnapshot,
+  salesMovements,
+  nextStock
+}
+
+Regla de oro:
+Al guardar una visita, la app debe congelar las ventas como movimientos por producto. Los informes deben leer esos movimientos, no recalcular desde la vista.
+
+No rompas estas reglas:
+1. Meses cerrados no se editan.
+2. Anos cerrados no se recalculan.
+3. Cambios de precio solo afectan el mes actual en adelante.
+4. El informe debe conservar toda la lista de productos, incluso con ventas 0.
+5. El orden de productos es importante porque el usuario copia la columna a Excel.
+6. La pantalla movil es prioridad.
+
+Siguiente trabajo recomendado:
+Validar manualmente la migracion a `salesMovements` siguiendo `agentes/pruebas/matriz-contabilidad.txt` y luego limpiar dependencias heredadas de banderas visuales si todo pasa.
+
+Antes de editar:
+Haz un barrido corto de `script.js` para confirmar que las funciones mencionadas en los documentos siguen existiendo.
+
+Despues de editar:
+Validar contra `agentes/pruebas/matriz-contabilidad.txt`.
+
+Nota:
+El proyecto puede tener cambios no confirmados. No reviertas cambios ajenos. Trabaja con el estado actual del codigo.

@@ -1,0 +1,41 @@
+AGENTE 1: BUSCAR SOLUCIONES ALTERNATIVAS PARA CONTABILIDAD Y ESPACIOS
+
+Objetivo:
+Analizar y proponer alternativas mas simples y robustas para manejar la relacion entre espacios fisicos de la vending machine, productos repetidos, cambios de producto y reportes contables.
+
+Contexto del problema:
+La maquina tiene espacios fisicos identificados como A01, A02, etc. En cada visita se registra cuanto producto se encontro y cuanto producto se dejo. La venta real se calcula comparando el stock dejado en la visita anterior contra lo encontrado en la visita actual.
+
+El dilema:
+La posicion fisica sirve para saber que stock habia antes, pero la contabilidad debe agruparse por producto, no por posicion. Ademas, un producto puede ocupar varios espacios, puede cambiarse de espacio, puede reemplazarse por otro producto y algunos espacios pueden quedar empty.
+
+Regla actual deseada:
+1. La venta debe pertenecer al producto que estaba antes en la maquina.
+2. El stock futuro debe pertenecer al producto que se deja ahora.
+3. La posicion solo es un puente operativo para comparar stock anterior contra encontrado.
+4. El informe mensual/anual debe agrupar por nombre de producto y respetar el orden de la lista base.
+5. Cambios de precio solo deben afectar el mes actual en adelante, nunca meses o anos cerrados.
+
+Tarea:
+Proponer al menos 3 modelos alternativos para resolver esto.
+
+Cada propuesta debe incluir:
+- Nombre del modelo.
+- Como se guardaria cada visita.
+- Como se calcularian ventas.
+- Como se guardaria el stock para la siguiente visita.
+- Como funcionaria si un producto ocupa varios espacios.
+- Como funcionaria si un producto cambia de posicion.
+- Como funcionaria si un producto se reemplaza por otro.
+- Riesgos o desventajas.
+- Que tan dificil seria migrar desde la logica actual.
+
+Prioridades:
+1. Evitar dobles conteos.
+2. Evitar que cambiar productos de posicion altere ventas pasadas.
+3. Mantener la experiencia facil en telefono.
+4. Mantener reportes faciles de copiar a Excel.
+5. Mantener cierres mensuales y anuales bloqueados e inmutables.
+
+Resultado esperado:
+Un documento breve pero decisivo recomendando una opcion principal y una opcion secundaria. La recomendacion debe explicar por que reduce el riesgo contable y por que seria facil de mantener.

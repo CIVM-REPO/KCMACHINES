@@ -1,0 +1,76 @@
+RESUMEN DEL PROYECTO KC MACHINE SELLS CONTROL
+
+Tipo de app:
+Aplicacion web estatica para controlar rellenos, ventas, productos, informes y cierres de una vending machine.
+
+Repositorio remoto:
+https://github.com/CIVM-REPO/KCMACHINES
+
+Archivos principales:
+- `index.html`: estructura de la interfaz.
+- `styles.css`: diseno responsivo, maquina visual, informes y productos.
+- `script.js`: estado, logica de productos, maquina, visitas, historial, informes y cierres.
+
+Almacenamiento:
+Actualmente todo vive en `localStorage`, bajo la clave `kc-machines-v27`.
+No existe backend real todavia.
+
+Estado principal:
+- `records`: visitas guardadas por fecha.
+- `monthClosures`: meses cerrados.
+- `yearClosures`: anos cerrados.
+- `products`: catalogo local de productos con costo y precio.
+- `machines`: preparado para varias maquinas, aunque por ahora se usa una.
+- `activeMachineId`: maquina activa.
+
+Pantalla principal:
+- Selector de fecha.
+- Mapa visual de la maquina.
+- Botones: Insertar datos, Stock de prueba, Limpiar datos.
+- Venta estimada.
+- Historial de los ultimos dias del mes.
+- Resumen del relleno.
+- Recordatorio de gasolina cada cuarta visita.
+
+Mapa de la maquina:
+La maquina tiene 60 espacios:
+- A01-A05
+- B01-B05
+- C01-C10
+- D01-D10
+- E01-E10
+- F01-F10
+
+Cada espacio puede tener:
+- Producto actual.
+- Producto anterior.
+- Stock anterior.
+- Cantidad encontrada.
+- Cantidad dejada.
+- Estado de captura.
+
+Productos:
+Existe una pagina de productos donde se pueden agregar, editar y eliminar productos.
+El orden de productos importa porque el informe debe copiarse en el mismo orden del Excel del usuario.
+Las imagenes se buscan en `assets/products/` usando el nombre exacto del producto.
+
+Informes:
+La pagina de informes muestra:
+- Mes actual.
+- Meses cerrados.
+- Anos finalizados.
+- Grafica anual de ventas/rentabilidad.
+- Gastos operativos.
+- Boton para copiar columna de ventas.
+
+Cierres:
+Al cerrar mes:
+- Se congela el resumen del mes.
+- Se bloquea la edicion de ese mes.
+- Se guarda el ultimo stock como referencia para el siguiente mes.
+
+Al cerrar diciembre:
+- Se genera cierre anual.
+- Los meses del ano cerrado se compactan dentro del cierre anual.
+- Se limpian registros del ano cerrado.
+- Se conserva el ultimo stock para iniciar el siguiente ano.

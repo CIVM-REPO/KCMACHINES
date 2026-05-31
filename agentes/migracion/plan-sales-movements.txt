@@ -1,0 +1,102 @@
+PLAN DE MIGRACION A SALES MOVEMENTS
+
+Objetivo:
+Separar contabilidad de la maquina visual sin romper la app actual.
+
+Principio:
+Los slots siguen existiendo para operar y mostrar la maquina.
+Los informes deben leer movimientos contables.
+
+Fase 1: Helpers puros
+Crear funciones que no toquen DOM:
+
+- `buildSlotsSnapshot(currentSlots)`
+  Devuelve snapshot operativo de la visita.
+
+- `buildSalesMovements(slotsSnapshot)`
+  Calcula ventas por producto anterior.
+  Ignora ventas con stock anterior 0.
+  Guarda precio/costo del momento.
+
+- `buildNextStock(slotsSnapshot)`
+  Guarda producto actual y stock dejado por espacio.
+
+- `recordSalesMovements(record)`
+  Si el record ya tiene `salesMovements`, los devuelve.
+  Si no los tiene, los deriva desde `slots` para compatibilidad.
+
+- `recordNextStock(record)`
+  Si el record ya tiene `nextStock`, lo devuelve.
+  Si no lo tiene, lo deriva desde `slots`.
+
+Fase 2: Guardado
+Modificar `currentRecord()` para guardar:
+- `slots` o `slotsSnapshot` para pantalla.
+- `salesMovements` para contabilidad.
+- `nextStock` para proxima visita.
+
+Mantener `slots` temporalmente para no romper carga/historial mientras se migra.
+
+Fase 3: Lectura de stock anterior
+Cambiar `previousStockMap(date)` para usar:
+1. `previousRecord.nextStock` si existe.
+2. `previousRecord.slots` como fallback.
+3. `openingStockNextYear` como fallback despues de cierre anual.
+
+Fase 4: Informes
+Cambiar:
+- `productTotalsForRecords(records)`
+- `recordSoldTotal(record)`
+- `accountingSummaryForRecords(records)`
+
+para que lean `salesMovements`.
+
+Fase 5: Historial
+Cambiar:
+- `recordStockTotal(record)` para leer `nextStock`.
+- `recordSoldTotal(record)` para leer `salesMovements`.
+
+Fase 6: Cierres
+Cambiar `finalizeMonthClosure()`:
+- producto vendido desde `salesMovements`.
+- stock siguiente desde `nextStock` del ultimo registro del mes.
+- cierre anual conserva ultimo `nextStock`.
+
+Fase 7: Compatibilidad
+Durante un tiempo, soportar registros antiguos:
+- Si no hay `salesMovements`, calcularlos desde `slots`.
+- Si no hay `nextStock`, calcularlo desde `slots`.
+
+Fase 8: Limpieza
+Despues de validar:
+- Reducir dependencia de `salesEntry`, `stockEntry`, `salesCounted`, `stockCounted`.
+- Mantener esas banderas solo si son necesarias para UI.
+- Evitar que informes las lean directamente.
+
+ESTADO DE IMPLEMENTACION:
+
+Implementado:
+- Helpers puros/compatibles para `slotsSnapshot`, `salesMovements` y `nextStock`.
+- Guardado de visitas con `slots`, `slotsSnapshot`, `salesMovements` y `nextStock`.
+- Lectura de stock anterior priorizando `previousRecord.nextStock`.
+- Informes, resumen contable e historial leyendo `salesMovements`/`nextStock` mediante helpers.
+- Cierre mensual/anual conservando `nextStock` como apertura siguiente.
+- Fallback para registros antiguos que solo tengan `slots`.
+- `nextStock` respeta `stockCounted` para mantener la regla actual de captura fusionada y evitar triple conteo en productos repetidos.
+
+Pendiente de limpieza:
+- Reducir gradualmente la dependencia visual de `salesEntry`, `stockEntry`, `salesCounted` y `stockCounted`.
+- Validar manualmente todos los casos de `pruebas/matriz-contabilidad.txt`.
+- Evaluar si los productos repetidos deben seguir contando por captura primaria o migrar a captura por espacio fisico completo.
+
+Orden recomendado de implementacion:
+1. Crear helpers puros.
+2. Cambiar `currentRecord()`.
+3. Cambiar informes para leer movimientos.
+4. Cambiar stock anterior para leer `nextStock`.
+5. Probar casos principales.
+6. Ajustar UI si algo queda inconsistente.
+
+Riesgo principal:
+Migrar todo a la vez puede romper carga de fechas existentes.
+Por eso la compatibilidad con registros antiguos es obligatoria.

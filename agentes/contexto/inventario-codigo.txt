@@ -1,0 +1,75 @@
+INVENTARIO DEL CODIGO ACTUAL
+
+Fuente:
+Inventario hecho sobre `script.js`, `index.html` y `styles.css`.
+
+Estado y carga:
+- `STORAGE_KEY`: clave de localStorage.
+- `loadState()`: lee estado desde localStorage.
+- `normalizeState()`: normaliza registros, cierres, maquinas y productos.
+- `syncProductCatalog()`: actualiza `products` y `productOrder`.
+- `saveState()`: guarda estado completo.
+- `resetStateData()`: limpia datos guardados.
+
+Fechas y visitas:
+- `getRecord(date)`: busca visita por fecha.
+- `getPreviousRecord(date)`: busca visita anterior.
+- `monthRecords(date)`: registros del mes activo.
+- `previousStockMap(date)`: stock anterior por espacio fisico.
+- `loadDate(date)`: arma `currentSlots` para la fecha seleccionada.
+- `currentRecord()`: convierte la pantalla actual en un registro guardable.
+- `saveSelectedDate()`: inserta o actualiza una visita.
+
+Maquina visual:
+- `buildDefaultSlots()`: genera espacios base.
+- `productForSlot(code)`: asignacion base de productos.
+- `buildMachine()`: renderiza la maquina.
+- `visualGroupsForRow(rowSlots)`: fusion visual de productos repetidos por fila.
+- `visualGroupWeight()`: peso visual de espacios fusionados.
+- `updateSlotProduct(code, productName)`: cambia el producto de un espacio.
+- `openSlotDialog(code)`: abre ventana para ingresar encontrado/dejado.
+- `saveSlotInputs()`: guarda encontrado/dejado en la pantalla activa.
+
+Contabilidad actual:
+- `previousProductForSlot(slot)`: producto que habia antes.
+- `slotHasSalesEntry(slot)`: indica si la venta fue capturada.
+- `slotHasStockEntry(slot)`: indica si el stock actual fue capturado.
+- `soldForSlot(slot)`: calcula venta en pantalla activa.
+- `soldForRecordSlot(record, slot, index)`: calcula venta de un registro guardado.
+- `productTotals()`: resumen de ventas de la fecha actual.
+- `productTotalsForRecords(records)`: resumen por producto para informes.
+- `recordSoldTotal(record)`: total vendido en un registro.
+- `recordStockTotal(record)`: total de stock dejado en un registro.
+- `accountingSummaryForRecords(records, overrides)`: resumen contable del mes.
+
+Productos repetidos:
+- `salesGroupForSlot(referenceSlot)`: agrupa por producto anterior.
+- `stockGroupForSlot(referenceSlot)`: agrupa por producto actual.
+- `ensureCaptureSlots()`: marca `salesCounted` y `stockCounted`.
+- `syncSlotEntryValues(referenceSlot)`: sincroniza encontrados/dejados en repetidos.
+
+Cierres:
+- `finalizeMonthClosure()`: cierra mes, congela resumen y guarda stock siguiente.
+- Si el mes cerrado es diciembre, tambien crea cierre anual.
+- `summaryFromClosure()`, `yearSummaryFromMonths()`, `compactMonthSummary()`: resumenes de cierres.
+
+Informes:
+- `showAccountingView()`: cambia a informes.
+- `renderAccounting()`: renderiza tarjetas y grafica.
+- `renderAccountingChart()`: grafica anual.
+- `salesColumnForCurrentMonth()`: columna copiable del mes actual.
+- `salesColumnForReport(report)`: columna copiable de un mes cerrado.
+
+Productos:
+- `showProductsView()`: abre editor de productos.
+- `renderProductsTable()`: tabla de productos.
+- `saveProductEdit(index)`: edita producto.
+- `applyProductEditToOpenRecords(oldName, nextProduct)`: aplica cambios a registros abiertos.
+- `deleteProduct(index)`: elimina producto.
+- `addProduct()`: agrega producto al final.
+
+Puntos fragiles:
+- La contabilidad sigue dependiendo demasiado de `slots`.
+- Hay banderas complejas: `salesEntry`, `stockEntry`, `salesCounted`, `stockCounted`, `counted`.
+- La fusion visual puede confundirse con la agrupacion contable si se toca sin cuidado.
+- Mes actual se recalcula desde slots guardados; seria mas estable guardar movimientos contables congelados.

@@ -1,0 +1,67 @@
+RECOMENDACIONES PARA KC MACHINES
+
+1. Hacer una prueba completa de flujo real
+
+- Dia 1: insertar stock inicial.
+- Dia 2: registrar encontrados y dejados.
+- Cerrar mes.
+- Cambiar precio de un producto.
+- Verificar que el mes cerrado no cambie.
+- Agregar y eliminar productos.
+- Cerrar diciembre y revisar el cierre anual.
+
+2. Agregar exportacion e importacion de respaldo
+
+La app guarda datos en localStorage. Si se borra el navegador, se pueden perder datos.
+Conviene agregar:
+
+- Exportar respaldo.
+- Importar respaldo.
+
+3. Limpiar codigo muerto
+
+Quitar variables o funciones que ya no se usan, por ejemplo legacyProductImages.
+No afecta el funcionamiento, pero hace mas facil mantener el proyecto.
+
+4. Separar datos y logica en archivos
+
+Cuando el proyecto crezca, conviene separar:
+
+- Catalogo de productos.
+- Logica de ventas.
+- Logica de informes.
+- Logica visual.
+
+5. Crear una seccion simple de configuracion
+
+Podria incluir:
+
+- Comision bancaria.
+- Cada cuantas visitas recordar gasolina.
+- Nombre de maquina.
+- Moneda.
+- Backup, importacion y limpieza de datos.
+
+6. Bloquear mejor acciones delicadas
+
+Agregar confirmaciones mas fuertes para:
+
+- Eliminar producto.
+- Limpiar datos.
+- Cerrar mes.
+- Cerrar año.
+
+Una opcion seria pedir escribir una palabra como CERRAR MES antes de confirmar.
+
+7. Pensar en almacenamiento mas robusto
+
+Para una APK o PWA, conviene pasar de localStorage a IndexedDB.
+IndexedDB aguanta mas datos y es mas estable para historial largo.
+
+PRIORIDAD SUGERIDA
+
+1. Backup e importacion.
+2. Prueba completa de flujo real.
+3. Limpieza de codigo.
+4. Configuracion.
+5. Migracion a IndexedDB.

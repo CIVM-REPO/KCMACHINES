@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>KC Machines - Control de ventas</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="menu-wrap">
+          <button class="menu-toggle" id="menuToggle" type="button" aria-label="Abrir menú" aria-expanded="false">
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
+          <nav class="app-menu" id="appMenu" aria-label="Menú secundario" hidden>
+            <button id="machineSwitcher" type="button">KC Machines</button>
+            <button id="mainViewButton" type="button">Ingreso de productos</button>
+            <button id="generateReport" type="button">Informes</button>
+            <button id="productsViewButton" class="menu-bottom-button" type="button">Productos</button>
+          </nav>
+        </div>
+        <div class="brand-mark" aria-label="KC Machines">
+          <span>KC</span>
+          <small>Machines</small>
+        </div>
+        <div>
+          <h1>CONTROL DE VENTAS</h1>
+        </div>
+      </header>
+      <button class="menu-backdrop" id="menuBackdrop" type="button" aria-label="Cerrar menú" hidden></button>
+
+      <section class="mockup theme-operator active" aria-label="Pantalla principal">
+        <div class="map-header section-title split-title">
+          <div>
+            <h2>Mapa de espacios</h2>
+            <p id="dateStatus" class="sr-only">Selecciona una fecha y edita los espacios de esa visita.</p>
+          </div>
+          <div class="date-control">
+            <button class="top-action date-action" id="dateButton" type="button">Hoy</button>
+            <input class="date-input" id="visitDate" type="date" aria-label="Fecha de visita">
+          </div>
+        </div>
+
+        <section class="machine-panel">
+          <div class="vending vending-glass" id="machineOperator"></div>
+          <div class="machine-actions">
+            <div class="machine-action-row">
+              <button class="update-stock-button" id="updateStock" type="button">Insertar datos</button>
+              <button class="test-stock-button" id="fillTestStock" type="button">Stock de prueba</button>
+              <button class="clear-data-button" id="clearTestData" type="button">Limpiar datos</button>
+            </div>
+            <button class="save-date-button" id="saveDateChanges" type="button" hidden>Guardar cambios</button>
+            <p id="stockStatus">Primera carga: registra lo que dejas y presiona Insertar datos.</p>
+            <div class="fuel-reminder" id="fuelReminder" hidden>
+              <strong>Recuerda cargar gasolina hoy</strong>
+              <label>
+                Gasolina comprada
+                <input id="fuelInput" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <section class="side-panel">
+          <aside class="sidebar">
+            <div class="summary-block">
+              <span>Venta estimada</span>
+              <strong id="pendingSales">0 unidades</strong>
+              <small id="lastUpdateLabel">Sin stock guardado</small>
+            </div>
+          </aside>
+
+          <section class="history-panel">
+            <div class="section-title split-title">
+              <div>
+                <h2>Historial</h2>
+                <p>Datos guardados por fecha. Toca una fecha para cargarla en la máquina.</p>
+              </div>
+            </div>
+            <div class="history-list" id="historyList"></div>
+          </section>
+
+          <section class="entry-panel compact-info">
+            <div class="section-title">
+              <h2>Resumen del relleno</h2>
+              <p>Ventas calculadas contra el último stock anterior a la fecha seleccionada.</p>
+            </div>
+            <div class="sales-list" id="salesList"></div>
+          </section>
+        </section>
+      </section>
+
+      <section class="accounting-view" id="accountingView" hidden aria-label="Informes">
+        <div class="map-header section-title split-title">
+          <div>
+            <h2>Informes</h2>
+            <p>Mes actual, cierres guardados y columna de ventas para Excel.</p>
+          </div>
+          <button class="top-action" id="backToMain" type="button">Volver a maquina</button>
+        </div>
+
+        <section class="accounting-dashboard">
+          <section class="accounting-chart-panel">
+            <div class="section-title split-title">
+              <div>
+                <h2>Ventas y rentabilidad</h2>
+                <p>Comparativo mensual entre venta total y rentabilidad.</p>
+              </div>
+            </div>
+            <div class="chart-dashboard">
+              <div class="accounting-chart" id="accountingChart"></div>
+              <aside class="operating-expenses" id="operatingExpenses"></aside>
+            </div>
+          </section>
+
+          <section class="month-cards" id="monthCards"></section>
+        </section>
+
+        <template id="closeMonthTemplate">
+          <div class="close-month-form" id="closeMonthForm" hidden>
+            <label>
+              Ventas con tarjeta
+              <input id="cardSalesInput" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+            </label>
+            <label>
+              Derecho de piso
+              <input id="floorFeeInput" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+            </label>
+            <label>
+              Gasolina del mes
+              <input id="fuelTotalInput" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+            </label>
+            <div class="close-preview" id="closePreview"></div>
+            <div class="close-actions">
+              <button id="cancelCloseMonth" type="button">Cancelar</button>
+              <button class="save-date-button" id="confirmCloseMonth" type="button">Confirmar cierre</button>
+            </div>
+          </div>
+        </template>
+      </section>
+
+      <section class="products-view" id="productsView" hidden aria-label="Productos">
+        <div class="map-header section-title split-title">
+          <div>
+            <h2>Productos</h2>
+            <p>Base de datos de productos, costos y precios de venta. La imagen se busca como NOMBRE EXACTO.png.</p>
+          </div>
+          <button class="top-action" id="backToMainFromProducts" type="button">Volver a maquina</button>
+        </div>
+
+        <section class="products-editor-panel">
+          <form class="product-form" id="productForm">
+            <label>
+              Producto
+              <input id="productNameInput" type="text" autocomplete="off" placeholder="Nombre del producto">
+            </label>
+            <label>
+              Costo
+              <input id="productCostInput" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+            </label>
+            <label>
+              Venta
+              <input id="productPriceInput" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+            </label>
+            <button class="save-date-button" id="addProductButton" type="submit">Agregar producto</button>
+          </form>
+          <div class="products-table" id="productsTable"></div>
+        </section>
+      </section>
+      <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+      <dialog class="slot-dialog" id="slotDialog" aria-labelledby="slotDialogTitle">
+        <form method="dialog">
+          <div class="dialog-head">
+            <div>
+              <span id="slotDialogCode">A01</span>
+              <h2 id="slotDialogTitle">Agua Cristal</h2>
+            </div>
+            <button class="icon-close" value="cancel" type="submit" aria-label="Cerrar">x</button>
+          </div>
+          <div class="dialog-inputs">
+            <label>
+              Encontré
+              <input id="foundInput" type="number" min="0" step="1" inputmode="numeric" autocomplete="off">
+            </label>
+            <label>
+              Dejo
+              <input id="leftInput" type="number" min="0" step="1" inputmode="numeric" autocomplete="off">
+            </label>
+          </div>
+          <p class="previous-stock" id="previousStockLabel">Stock anterior: 0 unidades</p>
+          <p class="dialog-result" id="dialogResult">Vendidas desde último stock: 0</p>
+          <menu>
+            <button value="cancel" type="submit">Cancelar</button>
+            <button class="save-dialog" id="saveSlot" value="default" type="button">Guardar</button>
+          </menu>
+        </form>
+      </dialog>
+
+    </main>
+    <script src="script.js"></script>
+  </body>
+</html>
