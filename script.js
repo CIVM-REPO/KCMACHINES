@@ -1,5 +1,7 @@
 const STORAGE_KEY = "kc-machines-v28-product-total";
 const EMPTY_PRODUCT = "EMPTY";
+const CONVEX_URL = String(window.KC_CONVEX_URL || "").trim().replace(/\/$/, "");
+let convexSaveTimer = null;
 
 const defaultProducts = [
   { name: "COCA-COLA", price: 0.9, cost: 0.6 },
@@ -153,6 +155,77 @@ function loadState() {
   } catch {
     return normalizeState({ records: [], monthClosures: [], yearClosures: [] });
   }
+}
+
+function applyRemoteState(remoteState) {
+  const normalized = normalizeState(remoteState);
+  Object.keys(state).forEach((key) => delete state[key]);
+  Object.assign(state, normalized);
+  syncProductCatalog();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+async function convexRequest(type, path, args) {
+  if (!CONVEX_URL) return null;
+
+  const response = await fetch(`${CONVEX_URL}/api/${type}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      path,
+      args,
+      format: "json"
+    })
+  });
+
+  if (!response.ok) throw new Error(`Convex HTTP ${response.status}`);
+
+  const payload = await response.json();
+  if (payload.status === "error") {
+    throw new Error(payload.errorMessage || "Convex request failed");
+  }
+
+  return payload.value;
+}
+
+async function loadStateFromConvex() {
+  if (!CONVEX_URL) return;
+
+  try {
+    const remoteState = await convexRequest("query", "appState:get", { key: STORAGE_KEY });
+    if (!remoteState) {
+      await saveStateToConvex();
+      return;
+    }
+
+    applyRemoteState(remoteState);
+    loadDate(visitDate.value);
+    showToast("Datos sincronizados con Convex");
+  } catch (error) {
+    console.warn("Convex sync failed", error);
+    showToast("Convex no disponible, usando datos locales");
+  }
+}
+
+function saveStateToConvex() {
+  if (!CONVEX_URL) return Promise.resolve();
+  return convexRequest("mutation", "appState:save", {
+    key: STORAGE_KEY,
+    data: state
+  });
+}
+
+function queueConvexSave() {
+  if (!CONVEX_URL) return;
+  clearTimeout(convexSaveTimer);
+  convexSaveTimer = setTimeout(() => {
+    saveStateToConvex().catch((error) => {
+      console.warn("Convex save failed", error);
+      showToast("No se pudo sincronizar con Convex");
+    });
+  }, 400);
 }
 
 function normalizeState(savedState) {
@@ -388,6 +461,7 @@ function saveState() {
   state.records.sort((a, b) => a.date.localeCompare(b.date));
   state.products = products;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  queueConvexSave();
 }
 
 function resetStateData() {
@@ -2262,3 +2336,4 @@ visitDate.addEventListener("change", () => loadDate(visitDate.value));
 
 visitDate.value = todayValue();
 loadDate(visitDate.value);
+loadStateFromConvex();
