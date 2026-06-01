@@ -157,6 +157,27 @@ function loadState() {
   }
 }
 
+function stateHasUserData(appState) {
+  return Boolean(
+    appState.records?.length
+    || appState.monthClosures?.length
+    || appState.yearClosures?.length
+    || appState.pendingProducts?.length
+    || appState.pendingProductsEffectiveMonth
+  );
+}
+
+function shouldKeepLocalState(remoteState) {
+  const normalizedRemote = normalizeState(remoteState);
+  const localHasData = stateHasUserData(state);
+  const remoteHasData = stateHasUserData(normalizedRemote);
+
+  if (localHasData && !remoteHasData) return true;
+  if (!localHasData) return false;
+
+  return Number(state.updatedAt || 0) > Number(normalizedRemote.updatedAt || 0);
+}
+
 function applyRemoteState(remoteState) {
   const normalized = normalizeState(remoteState);
   Object.keys(state).forEach((key) => delete state[key]);
@@ -196,7 +217,16 @@ async function loadStateFromConvex() {
   try {
     const remoteState = await convexRequest("query", "appState:get", { key: STORAGE_KEY });
     if (!remoteState) {
+      if (stateHasUserData(state)) {
+        await saveStateToConvex();
+        showToast("Datos locales subidos a Convex");
+      }
+      return;
+    }
+
+    if (shouldKeepLocalState(remoteState)) {
       await saveStateToConvex();
+      showToast("Datos locales sincronizados con Convex");
       return;
     }
 
@@ -238,7 +268,8 @@ function normalizeState(savedState) {
     products: normalizeProducts(savedState.products),
     pendingProducts: Array.isArray(savedState.pendingProducts) ? normalizeProducts(savedState.pendingProducts) : null,
     pendingProductsEffectiveMonth: savedState.pendingProductsEffectiveMonth || null,
-    seedScenario: savedState.seedScenario || null
+    seedScenario: savedState.seedScenario || null,
+    updatedAt: Number(savedState.updatedAt || 0)
   };
 }
 
@@ -460,6 +491,7 @@ function buildVisitRecord(date, previousStock, visitIndex) {
 function saveState() {
   state.records.sort((a, b) => a.date.localeCompare(b.date));
   state.products = products;
+  state.updatedAt = Date.now();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   queueConvexSave();
 }
