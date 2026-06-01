@@ -52,10 +52,10 @@ button {
 
 .topbar {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   column-gap: 14px;
   row-gap: 4px;
-  align-items: start;
+  align-items: center;
   margin-bottom: 8px;
 }
 
@@ -70,9 +70,10 @@ button {
 }
 
 .topbar > div:last-child {
-  grid-column: 1 / -1;
-  grid-row: 2;
-  align-self: end;
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  min-width: 0;
 }
 
 .menu-wrap {
@@ -155,8 +156,8 @@ body.menu-open .app-shell > *:not(.topbar):not(.menu-backdrop) {
 .brand-mark {
   display: grid;
   place-items: center;
-  width: 66px;
-  height: 56px;
+  width: 86px;
+  height: 73px;
   border: 1px solid rgba(53, 231, 154, 0.42);
   border-radius: 8px;
   background: linear-gradient(145deg, rgba(53, 231, 154, 0.14), rgba(70, 184, 255, 0.1));
@@ -164,14 +165,14 @@ body.menu-open .app-shell > *:not(.topbar):not(.menu-backdrop) {
 }
 
 .brand-mark span {
-  font-size: 24px;
+  font-size: 31px;
   font-weight: 900;
   line-height: 1;
 }
 
 .brand-mark small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 12px;
   text-transform: uppercase;
 }
 
@@ -986,6 +987,19 @@ h2 {
     rgba(255, 255, 255, 0.02);
 }
 
+.main-map-header {
+  justify-content: flex-end;
+  min-height: 0;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.main-map-header > div:first-child {
+  display: none;
+}
+
 .sidebar {
   order: 2;
   display: block;
@@ -1038,7 +1052,9 @@ h2 {
   display: block;
   margin: 4px 0;
   color: var(--green);
-  font-size: 34px;
+  font-size: clamp(22px, 2.5vw, 34px);
+  line-height: 1.06;
+  overflow-wrap: anywhere;
 }
 
 .machine-panel {
@@ -1463,12 +1479,13 @@ body.month-locked .vending-glass::before {
   width: var(--image-scale, 150%);
   height: var(--image-scale, 150%);
   object-fit: contain;
+  object-position: center center;
   filter: drop-shadow(0 7px 10px rgba(0, 0, 0, 0.36));
 }
 
 .product-visual.image-zoom-200 img {
-  width: var(--image-scale, 200%);
-  height: var(--image-scale, 200%);
+  width: var(--image-scale, 240%);
+  height: var(--image-scale, 240%);
 }
 
 .product-visual.can span {
@@ -2261,22 +2278,23 @@ input {
 
   .topbar {
     grid-template-columns: auto 1fr auto;
+    align-items: center;
     gap: 10px;
     min-height: auto;
     padding-bottom: 8px;
   }
 
   .brand-mark {
-    width: 58px;
-    height: 50px;
+    width: 75px;
+    height: 65px;
   }
 
   .brand-mark span {
-    font-size: 22px;
+    font-size: 29px;
   }
 
   .brand-mark small {
-    font-size: 9px;
+    font-size: 11px;
   }
 
   .eyebrow {
@@ -2284,7 +2302,7 @@ input {
   }
 
   h1 {
-    font-size: 20px;
+    font-size: clamp(18px, 5vw, 24px);
     line-height: 1.12;
   }
 
@@ -2306,6 +2324,10 @@ input {
 
   .map-header {
     padding: 12px;
+  }
+
+  .main-map-header {
+    padding: 4px 10px 8px;
   }
 
   .accounting-view .map-header,
@@ -2519,7 +2541,7 @@ input {
   .summary-block {
     grid-column: 1 / -1;
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr;
     align-items: center;
     margin-left: 0;
     min-width: 0;
@@ -2528,7 +2550,8 @@ input {
 
   .summary-block strong {
     margin: 0;
-    font-size: 25px;
+    font-size: clamp(18px, 6vw, 24px);
+    line-height: 1.12;
   }
 
   .summary-block small {
@@ -2735,7 +2758,7 @@ input {
   }
 
   .topbar {
-    grid-template-rows: 56px auto;
+    grid-template-rows: auto;
     column-gap: 18px;
     row-gap: 2px;
   }
@@ -2769,6 +2792,11 @@ input {
     grid-row: 1;
     min-height: 78px;
     padding: 18px;
+  }
+
+  .main-map-header {
+    min-height: 0;
+    padding: 8px 18px;
   }
 
   .sidebar {
