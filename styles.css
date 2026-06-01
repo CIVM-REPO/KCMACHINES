@@ -1479,13 +1479,12 @@ body.month-locked .vending-glass::before {
   width: var(--image-scale, 150%);
   height: var(--image-scale, 150%);
   object-fit: contain;
-  object-position: center center;
   filter: drop-shadow(0 7px 10px rgba(0, 0, 0, 0.36));
 }
 
 .product-visual.image-zoom-200 img {
-  width: var(--image-scale, 240%);
-  height: var(--image-scale, 240%);
+  width: var(--image-scale, 200%);
+  height: var(--image-scale, 200%);
 }
 
 .product-visual.can span {

@@ -607,7 +607,7 @@ function productImageScaleClass(productName) {
 }
 
 function productImageBaseScale(productName) {
-  return productImageScaleClass(productName) ? 240 : 150;
+  return productImageScaleClass(productName) ? 200 : 150;
 }
 
 function visualImageScale(productName, slotCount) {
