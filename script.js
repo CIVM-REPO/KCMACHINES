@@ -1041,7 +1041,9 @@ function visualGroupsForRow(rowSlots) {
 
 function visualSlotForGroup(group) {
   if (isEmptyProduct(group.product)) return group.slots[0];
-  return group.slots.find((slot) => isPrimaryProductSlot(slot)) || group.slots[0];
+  return group.slots.find((slot) => isPrimaryStockSlot(slot))
+    || group.slots.find((slot) => isPrimarySalesSlot(slot))
+    || group.slots[0];
 }
 
 function visualGroupWeight(group, rowSize) {
@@ -2353,7 +2355,7 @@ backToMainFromProducts.addEventListener("click", showMainView);
 productForm.addEventListener("submit", addProduct);
 fillTestStock.addEventListener("click", fillCurrentDateWithTestStock);
 clearTestData.addEventListener("click", clearAllTestData);
-dateButton.addEventListener("click", () => {
+function openVisitDatePicker() {
   try {
     if (typeof visitDate.showPicker === "function") {
       visitDate.showPicker();
@@ -2363,7 +2365,10 @@ dateButton.addEventListener("click", () => {
     // Some mobile browsers expose showPicker but only allow direct input taps.
   }
   visitDate.focus();
-});
+}
+
+dateButton.addEventListener("click", openVisitDatePicker);
+visitDate.addEventListener("click", openVisitDatePicker);
 visitDate.addEventListener("change", () => loadDate(visitDate.value));
 
 visitDate.value = todayValue();
