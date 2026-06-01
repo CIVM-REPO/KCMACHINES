@@ -2248,11 +2248,15 @@ productForm.addEventListener("submit", addProduct);
 fillTestStock.addEventListener("click", fillCurrentDateWithTestStock);
 clearTestData.addEventListener("click", clearAllTestData);
 dateButton.addEventListener("click", () => {
-  if (typeof visitDate.showPicker === "function") {
-    visitDate.showPicker();
-  } else {
-    visitDate.focus();
+  try {
+    if (typeof visitDate.showPicker === "function") {
+      visitDate.showPicker();
+      return;
+    }
+  } catch (error) {
+    // Some mobile browsers expose showPicker but only allow direct input taps.
   }
+  visitDate.focus();
 });
 visitDate.addEventListener("change", () => loadDate(visitDate.value));
 
