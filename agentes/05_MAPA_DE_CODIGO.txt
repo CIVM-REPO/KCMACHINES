@@ -1,0 +1,158 @@
+KC MACHINE SELLS CONTROL - MAPA DE CODIGO
+Actualizado: 2026-06-02
+
+ARCHIVOS PRINCIPALES
+
+index.html
+- Estructura de la SPA.
+- Carga styles.css.
+- Carga convex-config.js.
+- Carga script.js con cache-buster.
+
+styles.css
+- Layout visual, maquina, dialogos, informes, productos, responsive.
+
+script.js
+- Estado local.
+- Sincronizacion Convex.
+- Matriz visual.
+- Captura de visita.
+- Contabilidad.
+- Informes.
+- Productos.
+- Cierres.
+
+convex-config.js
+- Define window.KC_CONVEX_URL.
+- Actualmente apunta a trustworthy-dinosaur-668.
+
+convex/schema.js
+- Define appState y tablas normalizadas.
+
+convex/appState.js
+- Query appState:get.
+- Query appState:normalizedCounts.
+- Mutation appState:save.
+- syncNormalizedState().
+
+agentes/migracion/reset-convex-pruebas.mjs
+- Limpia datos de prueba en Convex conservando productos/precios.
+
+FUNCIONES IMPORTANTES EN script.js
+
+Estado/sync:
+- loadState()
+- normalizeState()
+- syncProductCatalog()
+- saveState()
+- loadStateFromConvex()
+- shouldKeepLocalState()
+- applyRemoteState()
+- saveStateToConvex()
+- queueConvexSave()
+
+Catalogo:
+- normalizeProducts()
+- catalogSnapshot()
+- catalogForRecord()
+- productCatalogItem()
+- productCatalogItemFrom()
+- productReportOrder()
+- scheduleCatalogChange()
+
+Imagenes:
+- productImageUrl()
+- preloadProductImages()
+- productVisualMarkup()
+
+Matriz/slots:
+- buildDefaultSlots()
+- productForSlot()
+- loadDate()
+- buildMachine()
+- updateSlotProduct()
+- applyVisualFusionByRow()
+- visualGroupsForRow()
+- visualSlotForGroup()
+- slotCodeSelectorMarkup()
+
+Representantes y detalles:
+- representativeMapForSlots()
+- isRepresentativeSlot()
+- createVisitDetailsForDate()
+- syncVisitDetailsFromVisual()
+- currentVisitDetailsList()
+- applyVisitDetailsToSlots()
+
+Contabilidad compatible:
+- recordVisitDetails()
+- recordSalesMovements()
+- recordNextStock()
+- buildSalesMovementsFromDetails()
+- buildNextStockFromDetails()
+- previousProductStockMap()
+
+Validacion:
+- pendingVisitDetails()
+- invalidVisitDetails()
+- validateRequiredCaptures()
+- hasStockMismatch()
+- isDateLocked()
+
+Dialogo captura:
+- openSlotDialog()
+- updateDialogResult()
+- saveSlotInputs()
+- handleSlotInputKeydown()
+
+Guardar visita:
+- currentRecord()
+- saveSelectedDate()
+
+Resumen/historial:
+- updateSummary()
+- productTotals()
+- renderSalesList()
+- renderHistory()
+
+Informes:
+- productTotalsForRecords()
+- accountingSummaryForRecords()
+- renderAccounting()
+- finalizeMonthClosure()
+- salesColumnForCurrentMonth()
+- salesColumnForReport()
+
+Productos:
+- renderProductsEditor()
+- saveProductEdit()
+- deleteProduct()
+- addProduct()
+
+FUNCIONES IMPORTANTES EN convex/appState.js
+
+Queries:
+- get
+- normalizedCounts
+
+Mutation:
+- save
+
+Normalizacion:
+- normalizedProducts()
+- machineList()
+- defaultVisualMatrix()
+- visualMatrixFromState()
+- visitDetailsForRecord()
+- syncNormalizedState()
+
+PUNTOS DE CUIDADO
+
+1. No volver a calcular ventas desde posicion visual.
+2. No quitar appState hasta migrar frontend a tablas normalizadas.
+3. No usar convex deploy a ciegas: puede apuntar a prod.
+4. No limpiar Convex sin confirmar deployment.
+5. Si se cambia la version de script.js, actualizar cache-buster en index.html.
+6. Si se cambian imagenes, actualizar productImageVersion.
+7. Si se cambia schema Convex, ejecutar npx.cmd convex dev --once contra el deployment usado.
+

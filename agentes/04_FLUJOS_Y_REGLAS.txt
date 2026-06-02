@@ -1,0 +1,192 @@
+KC MACHINE SELLS CONTROL - FLUJOS Y REGLAS
+Actualizado: 2026-06-02
+
+FLUJO DE ARRANQUE
+
+1. script.js define STORAGE_KEY.
+2. loadState() lee localStorage.
+3. Se normaliza el estado.
+4. Se sincroniza catalogo con syncProductCatalog().
+5. loadDate(visitDate.value) pinta la pantalla.
+6. loadStateFromConvex() intenta traer estado remoto.
+7. Si remoto gana, applyRemoteState() reemplaza estado local y repinta.
+
+REGLA LOCAL VS REMOTO
+
+Si local tiene datos pero remoto esta limpio:
+- Gana el que tenga updatedAt mas nuevo.
+
+Esto protege los resets de Convex:
+- Si se limpia Convex y el reset tiene updatedAt mas nuevo, local viejo no vuelve a subir.
+
+FLUJO DE CARGA DE FECHA
+
+Funcion:
+- loadDate(date)
+
+Hace:
+1. Aplica cambios pendientes de catalogo si corresponden.
+2. Precarga imagenes de productos.
+3. Lee record existente si hay.
+4. Calcula stock anterior por producto.
+5. Construye currentSlots desde buildDefaultSlots().
+6. Crea currentVisitDetails con createVisitDetailsForDate().
+7. Aplica detalles a slots.
+8. Calcula representantes.
+9. Renderiza maquina y resumen.
+
+CARGA INICIAL
+
+Condicion:
+- No hay record previo.
+- No hay stock anterior.
+
+Resultado al guardar:
+- type = carga_inicial
+- salesMovements = []
+- visitDetails guarda NS.
+- nextStock sale de NS.
+
+VISITA REAL
+
+Condicion:
+- Existe stock anterior desde visita previa o cierre.
+
+Regla:
+- SM es obligatorio para cerrar si hay representante.
+- NS es obligatorio para cerrar si hay representante.
+- Si no hay representante y stockAnterior > 0, se solicita SM manual.
+- Si no hay representante, NS queda 0.
+
+CALCULO DE VENTA
+
+UV = stockAnterior - SM
+
+Si UV < 0:
+- estado = error
+- se bloquea guardado.
+
+PRODUCTO SIN REPRESENTANTE
+
+Caso A:
+- stockAnterior = 0
+- representative = SR
+
+Resultado:
+- SM = 0
+- NS = 0
+- UV = 0
+- No requiere accion.
+
+Caso B:
+- stockAnterior > 0
+- representative = SR
+- captured = false
+
+Resultado:
+- validateRequiredCaptures() pide SM manual con prompt.
+- NS queda 0.
+- UV se calcula con el SM ingresado.
+
+PRODUCTO CON REPRESENTANTE
+
+Solo el representante abre dialogo.
+El dialogo edita:
+- SM
+- NS
+
+El producto queda capturado si:
+- foundCaptured = true
+- stockEntry = true
+
+DUPLICADOS VISUALES
+
+Los duplicados no capturan.
+Mantienen selector para poder cambiar producto.
+La app recalcula representantes despues de cambios visuales.
+
+FUSION POR FILA
+
+Funcion:
+- applyVisualFusionByRow()
+
+Si un producto se repite dentro de una fila:
+1. Se agrupa desde el primer ejemplar.
+2. Otros productos conservan orden relativo posible.
+3. Solo cambia la vista.
+
+FECHAS Y MESES BLOQUEADOS
+
+Funcion:
+- isDateLocked(date)
+
+Bloquea si:
+- El mes esta cerrado.
+- La fecha ya tiene record guardado.
+
+Motivo:
+Evitar ediciones retroactivas mientras se estabiliza el modelo.
+
+GUARDADO DE VISITA
+
+Funcion:
+- saveSelectedDate()
+
+Antes de guardar:
+1. Rechaza mes cerrado.
+2. Rechaza fecha ya guardada.
+3. Ejecuta validateRequiredCaptures().
+
+Registro final:
+- currentRecord()
+
+currentRecord guarda:
+- date
+- type
+- status
+- fuelCost
+- catalogSnapshot
+- slots
+- slotsSnapshot
+- visitDetails
+- salesMovements
+- nextStock
+
+CIERRE MENSUAL
+
+Funcion:
+- finalizeMonthClosure()
+
+Usa:
+- accountingSummaryForRecords(records)
+- recordNextStock(closingRecord)
+
+Guarda:
+- monthClosures
+- openingStockNextMonth
+- productTotals
+- metricas de venta/costo/rentabilidad/gastos
+
+Si se cierra diciembre:
+- crea yearClosures
+- compacta meses del anio
+- limpia records del anio cerrado
+
+CATALOGO
+
+Cambios de productos:
+- Se programan para el siguiente mes mediante pendingProducts.
+
+Motivo:
+- Evitar cambiar columnas/precios dentro del mes actual.
+
+INFORMES
+
+Los informes usan helpers compatibles:
+- recordSalesMovements(record)
+- recordNextStock(record)
+- productTotalsForRecords(records)
+
+Si record tiene visitDetails, los movimientos salen de UV y stock sale de NS.
+Si record es viejo, hay fallback.
+

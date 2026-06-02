@@ -1,0 +1,126 @@
+KC MACHINE SELLS CONTROL - ARQUITECTURA DE LA APP
+Actualizado: 2026-06-02
+
+PRINCIPIO CENTRAL
+
+Separar tres responsabilidades:
+
+1. Matriz visual
+   Responde: que producto aparece en que espacio fisico.
+
+2. Captura temporal de visita
+   Responde: que producto tiene representante, cuanto stock anterior tenia, cuanto se encontro y cuanto se dejo.
+
+3. Contabilidad historica
+   Responde: cuanto se vendio por producto y visita.
+
+La matriz visual no calcula ventas directamente.
+
+FORMULA CONTABLE UNICA
+
+UV = stockAnterior - SM
+
+Donde:
+- SM = stock encontrado al llegar a la maquina.
+- NS = nuevo stock dejado al terminar la visita.
+- UV = unidades vendidas.
+
+CAPA VISUAL
+
+La maquina visual usa espacios fisicos:
+- A01-A05
+- B01-B05
+- C01-C10
+- D01-D10
+- E01-E10
+- F01-F10
+
+Hay 50 espacios fisicos.
+
+Cada espacio tiene selector de producto.
+La matriz inicial esta vacia porque baseProductLayout = {}.
+
+FUSION VISUAL
+
+Si un producto se repite dentro de una fila, la app agrupa los duplicados desde el primer ejemplar de izquierda a derecha.
+
+Regla:
+- Solo afecta la representacion visual.
+- No elimina productos del catalogo.
+- No cambia ventas historicas.
+- No reordena el orden contable.
+
+REPRESENTANTE VISUAL
+
+Cada producto tiene como maximo un representante visual por visita.
+
+El representante se calcula por barrido global:
+1. De arriba hacia abajo.
+2. De izquierda a derecha dentro de cada fila.
+
+Solo el representante abre el dialogo de captura.
+Los duplicados conservan selector, pero no capturan contabilidad.
+
+TABLA TEMPORAL DE VISITA EN FRONTEND
+
+Estructura conceptual:
+- currentVisitDetails: Map por producto.
+
+Cada detalle contiene:
+- product
+- stockAnterior
+- representative
+- SM
+- NS
+- UV
+- status
+- note
+- captured
+- price
+- cost
+
+Si representative = "SR", el producto no tiene representante visual.
+
+CONTABILIDAD HISTORICA
+
+Al guardar una visita se crea:
+- visitDetails
+- salesMovements
+- nextStock
+
+visitDetails es la verdad por producto.
+salesMovements y nextStock se mantienen por compatibilidad/reportes actuales.
+
+salesMovements se deriva desde visitDetails:
+- sold = UV
+
+nextStock se deriva desde visitDetails:
+- stock = NS
+
+CARGA INICIAL
+
+Si no hay visitas previas ni stock anterior:
+- type = carga_inicial
+- No se generan ventas.
+- Se guarda NS como base para la siguiente visita real.
+
+VISITA REAL
+
+Si existe stock anterior:
+- La app exige captura de SM/NS para productos con representante.
+- Si un producto no tiene representante pero stockAnterior > 0, pide SM manual.
+- NS de la visita actual se convierte en stockAnterior de la siguiente visita.
+
+ORDEN CONTABLE
+
+El orden contable viene del catalogo de productos y maquina_productos.
+No depende del orden visual de la matriz.
+
+PRODUCTOS CON HISTORIAL
+
+Regla deseada:
+Los productos con historial no deben borrarse fisicamente. Deben quedar inactivos.
+
+Estado actual:
+El frontend todavia conserva compatibilidad con catalogo programado por mes, pero la base normalizada ya tiene campo activo/activoEnMaquina para evolucionar esta regla.
+

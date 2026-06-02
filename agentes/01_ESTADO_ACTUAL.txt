@@ -1,0 +1,105 @@
+KC MACHINE SELLS CONTROL - ESTADO ACTUAL
+Actualizado: 2026-06-02
+
+RESUMEN
+
+La app es una SPA estatica para controlar una maquina vending: matriz visual, captura de visitas, stock, ventas, productos, informes y cierres.
+
+Archivos principales:
+- index.html
+- styles.css
+- script.js
+- convex/schema.js
+- convex/appState.js
+- convex-config.js
+- agentes/migracion/reset-convex-pruebas.mjs
+
+Rama/remoto:
+- Rama usada: main
+- Remoto: https://github.com/CIVM-REPO/KCMACHINES.git
+
+Commits recientes importantes:
+- c2e1234 Add migration reference report
+- 7830b68 Normalize Convex visit data
+- a13e549 Refactor visit accounting and reset test data
+
+DEPLOYMENT CONVEX QUE USA LA APP
+
+La app carga:
+- convex-config.js
+
+Ese archivo define:
+- window.KC_CONVEX_URL = "https://trustworthy-dinosaur-668.convex.cloud"
+
+Por tanto, el deployment activo para la app actual es:
+- dev:trustworthy-dinosaur-668
+- URL: https://trustworthy-dinosaur-668.convex.cloud
+
+Existe un deployment prod detectado por Convex CLI:
+- perceptive-wren-156
+
+Importante:
+No asumir que prod es el entorno usado por la app. Antes de desplegar o limpiar datos, revisar convex-config.js y .env.local.
+
+ESTADO DE DATOS VERIFICADO DESPUES DEL RESET
+
+En Convex dev trustworthy-dinosaur-668:
+- maquinas: 1
+- productos: 31
+- maquina_productos: 31
+- matriz_visual: 50
+- visitas: 0
+- detalle_visita: 0
+
+La base quedo como primera carga real:
+- Catalogo conservado.
+- Precios/costos conservados.
+- Matriz visual vacia.
+- Sin visitas.
+- Sin cierres.
+
+MODELO ACTUAL
+
+La app mantiene un modelo hibrido:
+
+1. appState
+   Documento completo de compatibilidad. El frontend actual sigue leyendo/escribiendo este estado para mantener fluidez.
+
+2. Tablas normalizadas Convex
+   Se sincronizan desde appState en cada save. Preparan la base para reportes, auditoria y evolucion multi-maquina.
+
+La fuente logica de contabilidad en la app es visitDetails.
+
+CLAVE DE ESTADO
+
+STORAGE_KEY:
+- kc-machines-v28-product-total
+
+SINCRONIZACION
+
+Al cargar:
+1. La app lee localStorage.
+2. Intenta leer Convex.
+3. Si remoto es mas nuevo, remoto gana.
+4. Si local es mas nuevo, local puede subir a remoto.
+
+Correccion importante:
+Si Convex esta limpio y es mas nuevo que local, el remoto limpio gana. Esto evita que datos locales viejos recontaminen un reset de Convex.
+
+ESTADO VISUAL INICIAL
+
+baseProductLayout esta vacio.
+Si no hay datos previos, los 50 espacios inician en EMPTY.
+
+FECHAS GUARDADAS
+
+Una fecha ya guardada queda bloqueada para edicion.
+Los meses cerrados tambien quedan bloqueados.
+
+IMAGENES
+
+Las imagenes de productos usan version estable:
+- productImageVersion = "20260602-product-cache"
+
+Se precargan una vez al cargar fecha para evitar recargas innecesarias en rerenders.
+

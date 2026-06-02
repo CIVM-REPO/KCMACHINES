@@ -1,0 +1,188 @@
+KC MACHINE SELLS CONTROL - PRUEBAS Y OPERACION
+Actualizado: 2026-06-02
+
+COMANDOS BASICOS
+
+Servidor local:
+- npm.cmd run dev
+
+URL local:
+- http://127.0.0.1:4173/
+
+Validar JS:
+- node --check script.js
+- node --check convex/schema.js
+- node --check convex/appState.js
+
+Actualizar Convex dev usado por la app:
+- npx.cmd convex dev --once
+
+Resetear datos de prueba en Convex conservando catalogo:
+- npm.cmd run convex:reset-pruebas
+
+Auditar tablas normalizadas:
+
+node -e "const url='https://trustworthy-dinosaur-668.convex.cloud'; fetch(url+'/api/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:'appState:normalizedCounts',args:{},format:'json'})}).then(r=>r.json()).then(j=>{if(j.status==='error') throw new Error(j.errorMessage); console.log(JSON.stringify(j.value,null,2));})"
+
+ESTADO ESPERADO DESPUES DE RESET
+
+- maquinas: 1
+- productos: 31
+- maquina_productos: 31
+- matriz_visual: 50
+- visitas: 0
+- detalle_visita: 0
+
+En la app:
+- 50 espacios visibles.
+- 50 selectores.
+- Todos en EMPTY.
+- pendingSales = 0 unidades.
+- dateStatus indica fecha nueva sin refill previo.
+- stockStatus indica que se puede insertar datos.
+
+PRUEBA 1 - CARGA INICIAL
+
+Objetivo:
+Verificar que primer guardado no genera ventas.
+
+Pasos:
+1. Resetear Convex.
+2. Abrir app.
+3. Asignar productos a algunos espacios.
+4. Abrir representante de cada producto.
+5. Dejar SM = 0.
+6. Dejar NS > 0.
+7. Guardar.
+
+Esperado:
+- Se crea 1 visita.
+- tipo = carga_inicial.
+- detalle_visita guarda NS por producto.
+- UV = 0.
+- ventas mensuales = 0.
+
+PRUEBA 2 - SEGUNDA VISITA REAL
+
+Objetivo:
+Verificar ventas por producto.
+
+Pasos:
+1. Elegir fecha posterior.
+2. La app carga stockAnterior desde NS previo.
+3. Para un producto con stockAnterior 10, capturar SM = 4, NS = 8.
+4. Guardar.
+
+Esperado:
+- UV = 6.
+- detalle_visita tiene stockAnterior 10, SM 4, NS 8, UV 6.
+- salesMovements reporta 6 vendidas.
+- nextStock tiene stock 8 para ese producto.
+
+PRUEBA 3 - PRODUCTO SIN REPRESENTANTE CON STOCK ANTERIOR
+
+Objetivo:
+Verificar retiro visual sin perder venta.
+
+Pasos:
+1. En una visita previa dejar stock de un producto.
+2. En la siguiente visita quitar ese producto de la matriz.
+3. Guardar.
+
+Esperado:
+- La app pide SM manual.
+- NS queda 0.
+- UV = stockAnterior - SM.
+- El producto no desaparece de contabilidad.
+
+PRUEBA 4 - PRODUCTO DUPLICADO
+
+Objetivo:
+Verificar representante unico.
+
+Pasos:
+1. Poner el mismo producto en varios espacios.
+2. Confirmar que la fila agrupa duplicados.
+3. Intentar abrir captura en duplicados.
+
+Esperado:
+- Solo el representante abre dialogo.
+- Duplicados conservan selector.
+- detalle_visita crea una sola fila por producto.
+
+PRUEBA 5 - INCONSISTENCIA SM > stockAnterior
+
+Objetivo:
+Verificar bloqueo por UV negativo.
+
+Pasos:
+1. Tener stockAnterior 9.
+2. Capturar SM = 10.
+3. Intentar guardar.
+
+Esperado:
+- UV = -1.
+- La app marca inconsistencia.
+- No permite guardar.
+
+PRUEBA 6 - FECHA GUARDADA BLOQUEADA
+
+Objetivo:
+Verificar no edicion retroactiva.
+
+Pasos:
+1. Guardar una visita.
+2. Volver a esa fecha en historial.
+
+Esperado:
+- Selectores bloqueados.
+- Dialogo no abre.
+- No se puede guardar cambios.
+
+PRUEBA 7 - CIERRE MENSUAL
+
+Objetivo:
+Validar cierre.
+
+Pasos:
+1. Guardar visitas reales en un mes.
+2. Ir a informes.
+3. Cerrar mes.
+
+Esperado:
+- monthClosures tiene resumen.
+- Mes queda bloqueado.
+- openingStockNextMonth viene del ultimo NS.
+
+PRUEBA 8 - CONVEX NORMALIZADO
+
+Objetivo:
+Verificar tablas reales.
+
+Pasos:
+1. Guardar una visita.
+2. Consultar appState:normalizedCounts.
+
+Esperado:
+- visitas aumenta.
+- detalle_visita aumenta.
+- productos y maquina_productos se mantienen.
+- matriz_visual sigue en 50.
+
+RIESGOS OPERATIVOS
+
+1. Deployment equivocado.
+   convex deploy apunta a prod por defecto. Para el entorno usado por la app, usar npx.cmd convex dev --once.
+
+2. Datos locales viejos.
+   Si una prueba no refleja reset, abrir nueva pestana o limpiar localStorage. El codigo ya protege reset remoto mas nuevo.
+
+3. Dos dispositivos editando a la vez.
+   appState sigue siendo documento completo. Ultimo guardado puede ganar.
+
+4. Frontend aun no lee tablas normalizadas directamente.
+   Las tablas se sincronizan como fuente preparada, pero appState sigue siendo compatibilidad principal.
+
+5. Produccion.
+   No se ha configurado frontend contra perceptive-wren-156. Si se decide usar prod, actualizar convex-config.js y variables correspondientes.
+

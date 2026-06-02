@@ -1,0 +1,210 @@
+KC MACHINE SELLS CONTROL - CONVEX Y BASE DE DATOS
+Actualizado: 2026-06-02
+
+ARCHIVOS
+
+- convex/schema.js
+- convex/appState.js
+- convex-config.js
+- .env.local
+
+DEPLOYMENT ACTIVO
+
+La app local y el frontend actual apuntan a:
+- https://trustworthy-dinosaur-668.convex.cloud
+
+Este valor vive en:
+- convex-config.js
+
+No confundir con prod perceptive-wren-156, que Convex CLI puede sugerir para convex deploy.
+
+TABLAS
+
+1. appState
+
+Tabla de compatibilidad.
+
+Campos:
+- key
+- data
+- updatedAt
+
+Uso:
+- Guarda una copia completa del estado de la app.
+- El frontend actual sigue usando appState para carga rapida y sincronizacion simple.
+- Cada save de appState dispara syncNormalizedState para poblar tablas reales.
+
+2. maquinas
+
+Guarda maquinas vending.
+
+Campos:
+- idMaquina
+- nombreMaquina
+- configuracionFilas
+- createdAt
+- updatedAt
+
+Estado actual:
+- 1 maquina: kc-01 / KC Machines
+
+3. productos
+
+Catalogo general.
+
+Campos:
+- idProducto
+- nombreProducto
+- precio
+- costo
+- activo
+- createdAt
+- updatedAt
+
+Estado actual:
+- 31 productos.
+
+4. maquina_productos
+
+Relacion producto-maquina.
+
+Campos:
+- idMaquina
+- idProducto
+- ordenContable
+- activoEnMaquina
+- createdAt
+- updatedAt
+
+Uso:
+- Define orden contable estable.
+- Evita depender del orden visual.
+
+5. matriz_visual
+
+Estado visual actual de la maquina.
+
+Campos:
+- idMaquina
+- coordenada
+- fila
+- columna
+- idProducto
+- updatedAt
+
+Estado actual:
+- 50 filas.
+- idProducto null en arranque limpio.
+
+Uso:
+- Responde que producto esta visualmente en cada espacio.
+- No es historial contable.
+
+6. visitas
+
+Cada visita guardada.
+
+Campos:
+- idVisita
+- idMaquina
+- fecha
+- tipo
+- estado
+- fuelCost
+- createdAt
+- closedAt
+
+Tipos esperados:
+- carga_inicial
+- visita_real
+- ajuste_manual
+
+7. detalle_visita
+
+Tabla contable principal.
+
+Campos:
+- idDetalleVisita
+- idVisita
+- idMaquina
+- idProducto
+- nombreProducto
+- stockAnterior
+- representante
+- SM
+- NS
+- UV
+- estadoValidacion
+- notaValidacion
+- precio
+- costo
+- createdAt
+
+Uso:
+- Una fila por producto por visita.
+- Fuente real para ventas.
+- UV = stockAnterior - SM.
+
+SINCRONIZACION NORMALIZADA
+
+Funcion:
+- syncNormalizedState(ctx, appState)
+
+Ubicacion:
+- convex/appState.js
+
+Se ejecuta dentro de appState.save.
+
+Hace:
+1. Normaliza maquinas.
+2. Normaliza productos.
+3. Crea/actualiza maquina_productos.
+4. Reescribe matriz_visual desde el ultimo record si existe, o matriz vacia.
+5. Reescribe visitas desde appState.records.
+6. Reescribe detalle_visita desde record.visitDetails.
+
+Importante:
+Actualmente la normalizacion reescribe visitas/detalles/matriz para la maquina activa.
+Esto simplifica consistencia mientras frontend sigue guardando appState completo.
+
+CONSULTA DE AUDITORIA
+
+Funcion:
+- appState:normalizedCounts
+
+Retorna conteos de:
+- maquinas
+- productos
+- maquinaProductos
+- matrizVisual
+- visitas
+- detalleVisita
+
+RESET PARA PRUEBAS
+
+Script:
+- agentes/migracion/reset-convex-pruebas.mjs
+
+Comando:
+- npm.cmd run convex:reset-pruebas
+
+Limpia:
+- records
+- monthClosures
+- yearClosures
+- pendingProducts
+- pendingProductsEffectiveMonth
+- seedScenario
+
+Conserva:
+- products
+- machines
+- activeMachineId
+
+DESPLIEGUE CONVEX
+
+Para actualizar el deployment dev usado por la app:
+- npx.cmd convex dev --once
+
+No usar convex deploy sin revisar, porque por defecto intenta prod.
+
