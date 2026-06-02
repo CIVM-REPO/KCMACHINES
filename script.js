@@ -38,7 +38,8 @@ const defaultProducts = [
 ];
 let products = [];
 let productOrder = new Map();
-let imageRefreshVersion = Date.now();
+const productImageVersion = "20260602-product-cache";
+const preloadedProductImages = new Set();
 const productColors = ["#46b8ff", "#35e79a", "#f8c45c", "#ef7b8c", "#b98cff", "#72dfdf", "#ff9d5c", "#a6f06f"];
 const monthNamesShort = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 const baseProductLayout = {};
@@ -788,7 +789,16 @@ function escapeHtml(value) {
 
 function productImageUrl(productName) {
   if (isEmptyProduct(productName)) return "";
-  return `assets/products/${encodeURIComponent(productName)}.png?v=${imageRefreshVersion}`;
+  return `assets/products/${encodeURIComponent(productName)}.png?v=${productImageVersion}`;
+}
+
+function preloadProductImages(catalogProducts = products) {
+  catalogProducts.forEach((product) => {
+    if (!product?.name || preloadedProductImages.has(product.name)) return;
+    preloadedProductImages.add(product.name);
+    const image = new Image();
+    image.src = productImageUrl(product.name);
+  });
 }
 
 function productImageScaleClass(productName) {
@@ -1007,6 +1017,7 @@ function legacyPreviousStockEntryForSlot(slot, legacyProductEntries, usedLegacyP
 
 function loadDate(date) {
   applyPendingCatalogForDate(date);
+  preloadProductImages();
   const existing = getRecord(date);
   const visitCatalog = catalogForRecord(existing);
   const previousRecord = getPreviousRecord(date);
@@ -1318,7 +1329,6 @@ function slotCodeSelectorMarkup(groupSlots, locked, catalogProducts) {
 }
 
 function buildMachine() {
-  imageRefreshVersion = Date.now();
   machineTarget.innerHTML = "";
   let slotIndex = 0;
   const locked = isDateLocked(visitDate.value);
