@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node serve.mjs",
     "convex:dev": "convex dev",
-    "convex:deploy": "convex deploy"
+    "convex:deploy": "convex deploy",
+    "convex:reset-pruebas": "node agentes/migracion/reset-convex-pruebas.mjs https://trustworthy-dinosaur-668.convex.cloud"
   },
   "dependencies": {
     "convex": "latest"
