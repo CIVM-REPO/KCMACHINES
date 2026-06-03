@@ -24,14 +24,30 @@ function normalizedProducts(appState) {
 }
 
 function machineList(appState) {
-  const machines = Array.isArray(appState?.machines) && appState.machines.length
-    ? appState.machines
-    : [{ id: "kc-01", name: "KC Machines" }];
+  const machines = Array.isArray(appState?.machines) ? appState.machines : [];
 
-  return machines.map((machine) => ({
-    idMaquina: String(machine.id || "kc-01"),
-    nombreMaquina: String(machine.name || machine.nombreMaquina || "KC Machines")
-  }));
+  return machines
+    .filter((machine) => !machine.deletedAt)
+    .map((machine, index) => ({
+      idMaquina: String(machine.id || machine.idMaquina || `machine-${index + 1}`),
+      nombreMaquina: String(machine.name || machine.nombreMaquina || `Maquina ${index + 1}`),
+      status: String(machine.status || "active"),
+      deletedAt: machine.deletedAt || null,
+      settings: {
+        bankCommissionPercent: Number(machine.settings?.bankCommissionPercent ?? 3),
+        fuelReminderEveryVisits: Number(machine.settings?.fuelReminderEveryVisits ?? 4),
+        monthlyFloorCost: Number(machine.settings?.monthlyFloorCost ?? 0)
+      }
+    }));
+}
+
+function machineProductIds(appState, idMaquina, products) {
+  const saved = appState?.machineProductIds;
+  const hasMap = saved && typeof saved === "object" && !Array.isArray(saved);
+  if (!hasMap) return products.map((product) => product.idProducto);
+  return Array.isArray(saved[idMaquina])
+    ? saved[idMaquina].map(productId).filter(Boolean)
+    : [];
 }
 
 function machineConfigRows() {
@@ -54,12 +70,16 @@ function defaultVisualMatrix(idMaquina) {
   });
 }
 
-function latestRecord(appState) {
-  return [...(appState?.records || [])].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0] || null;
+function recordsForMachine(appState, idMaquina) {
+  return (appState?.records || []).filter((record) => record.machineId === idMaquina || record.idMaquina === idMaquina);
+}
+
+function latestRecord(appState, idMaquina) {
+  return [...recordsForMachine(appState, idMaquina)].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0] || null;
 }
 
 function visualMatrixFromState(appState, idMaquina) {
-  const record = latestRecord(appState);
+  const record = latestRecord(appState, idMaquina);
   const slots = Array.isArray(record?.slotsSnapshot) ? record.slotsSnapshot : Array.isArray(record?.slots) ? record.slots : [];
   const byCode = new Map(slots.map((slot) => [slot.code, slot]));
 
@@ -154,12 +174,30 @@ async function deleteByMachine(ctx, table, idMaquina) {
   await Promise.all(rows.map((row) => ctx.db.delete(row._id)));
 }
 
+async function deleteMachineBundle(ctx, idMaquina) {
+  await deleteByMachine(ctx, "maquina_productos", idMaquina);
+  await deleteByMachine(ctx, "matriz_visual", idMaquina);
+  await deleteByMachine(ctx, "detalle_visita", idMaquina);
+  await deleteByMachine(ctx, "visitas", idMaquina);
+}
+
 async function syncNormalizedState(ctx, appState) {
   const now = Date.now();
   const machines = machineList(appState);
-  const activeMachineId = String(appState?.activeMachineId || machines[0]?.idMaquina || "kc-01");
+  const activeMachineId = appState?.activeMachineId && machines.some((machine) => machine.idMaquina === appState.activeMachineId && machine.status !== "inactive")
+    ? String(appState.activeMachineId)
+    : machines.find((machine) => machine.status !== "inactive")?.idMaquina || null;
   const products = normalizedProducts(appState);
   const productsById = new Map(products.map((product) => [product.idProducto, product]));
+  const machineIds = new Set(machines.map((machine) => machine.idMaquina));
+
+  const existingMachines = await ctx.db.query("maquinas").collect();
+  await Promise.all(existingMachines
+    .filter((machine) => !machineIds.has(machine.idMaquina))
+    .map(async (machine) => {
+      await deleteMachineBundle(ctx, machine.idMaquina);
+      await ctx.db.delete(machine._id);
+    }));
 
   await Promise.all(machines.map((machine) => upsertByIndex(
     ctx,
@@ -169,6 +207,9 @@ async function syncNormalizedState(ctx, appState) {
     {
       idMaquina: machine.idMaquina,
       nombreMaquina: machine.nombreMaquina,
+      status: machine.status,
+      deletedAt: machine.deletedAt,
+      settings: machine.settings,
       configuracionFilas: machineConfigRows(),
       createdAt: now,
       updatedAt: now
@@ -188,7 +229,14 @@ async function syncNormalizedState(ctx, appState) {
     }
   )));
 
-  await Promise.all(products.map((product, index) => upsertByIndex(
+  if (!activeMachineId) return;
+
+  const activeMachineProducts = machineProductIds(appState, activeMachineId, products)
+    .map((idProducto) => productsById.get(idProducto))
+    .filter(Boolean);
+
+  await deleteByMachine(ctx, "maquina_productos", activeMachineId);
+  await Promise.all(activeMachineProducts.map((product, index) => upsertByIndex(
     ctx,
     "maquina_productos",
     "by_maquina_producto",
@@ -211,7 +259,7 @@ async function syncNormalizedState(ctx, appState) {
 
   await deleteByMachine(ctx, "detalle_visita", activeMachineId);
   await deleteByMachine(ctx, "visitas", activeMachineId);
-  for (const record of appState?.records || []) {
+  for (const record of recordsForMachine(appState, activeMachineId)) {
     const idVisita = `${activeMachineId}:${record.date}`;
     await ctx.db.insert("visitas", {
       idVisita,

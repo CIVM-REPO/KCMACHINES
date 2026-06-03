@@ -17,9 +17,11 @@
           </button>
           <nav class="app-menu" id="appMenu" aria-label="Menú secundario" hidden>
             <button id="machineSwitcher" type="button">KC Machines</button>
+            <div class="machine-menu-list" id="machineMenuList" hidden></div>
             <button id="mainViewButton" type="button">Ingreso de productos</button>
             <button id="generateReport" type="button">Informes</button>
             <button id="productsViewButton" class="menu-bottom-button" type="button">Productos</button>
+            <button id="settingsViewButton" type="button">Configuracion</button>
           </nav>
         </div>
         <div class="brand-mark" aria-label="KC Machines">
@@ -33,6 +35,14 @@
       <button class="menu-backdrop" id="menuBackdrop" type="button" aria-label="Cerrar menú" hidden></button>
 
       <section class="mockup theme-operator active" aria-label="Pantalla principal">
+        <section class="zero-state-panel" id="zeroStatePanel" hidden>
+          <div>
+            <h2>Crear primera maquina</h2>
+            <p>La app esta lista para iniciar sin maquinas, sin productos y sin historial.</p>
+          </div>
+          <button class="save-date-button" id="zeroCreateMachine" type="button">Crear maquina</button>
+        </section>
+
         <div class="map-header main-map-header section-title split-title">
           <div>
             <h2>Mapa de espacios</h2>
@@ -49,8 +59,6 @@
           <div class="machine-actions">
             <div class="machine-action-row">
               <button class="update-stock-button" id="updateStock" type="button">Insertar datos</button>
-              <button class="test-stock-button" id="fillTestStock" type="button">Stock de prueba</button>
-              <button class="clear-data-button" id="clearTestData" type="button">Limpiar datos</button>
             </div>
             <button class="save-date-button" id="saveDateChanges" type="button" hidden>Guardar cambios</button>
             <p id="stockStatus">Primera carga: registra lo que dejas y presiona Insertar datos.</p>
@@ -170,6 +178,83 @@
           <div class="products-table" id="productsTable"></div>
         </section>
       </section>
+      <section class="settings-view" id="settingsView" hidden aria-label="Configuracion">
+        <div class="map-header section-title split-title">
+          <div>
+            <h2>Configuracion</h2>
+            <p>Preferencias globales y ajustes operativos de la maquina activa.</p>
+          </div>
+          <button class="top-action" id="backToMainFromSettings" type="button">Volver a maquina</button>
+        </div>
+
+        <section class="settings-grid">
+          <article class="settings-panel">
+            <div class="section-title">
+              <h2>Global</h2>
+              <p>Preferencias generales y administracion de maquinas.</p>
+            </div>
+            <label>
+              Moneda
+              <input id="currencyInput" type="text" maxlength="8" autocomplete="off" placeholder="USD">
+            </label>
+            <label>
+              Idioma futuro
+              <input id="languageInput" type="text" autocomplete="off" placeholder="Pendiente">
+            </label>
+            <label>
+              Preferencias visuales futuras
+              <input id="visualPreferencesInput" type="text" autocomplete="off" placeholder="Pendiente">
+            </label>
+            <form class="machine-create-form" id="machineCreateForm">
+              <label>
+                Nueva maquina
+                <input id="newMachineNameInput" type="text" autocomplete="off" placeholder="Nombre de maquina">
+              </label>
+              <label>
+                Heredar productos de
+                <select id="inheritMachineSelect"></select>
+              </label>
+              <button class="save-date-button" type="submit">Crear maquina</button>
+            </form>
+            <div class="machine-admin-list" id="machineAdminList"></div>
+          </article>
+
+          <article class="settings-panel">
+            <div class="section-title">
+              <h2>Maquina actual</h2>
+              <p>Comision, gasolina, derecho de piso, backup y datos de esta maquina.</p>
+            </div>
+            <div id="machineSettingsEmpty" class="products-empty" hidden>No hay maquina activa.</div>
+            <div id="machineSettingsForm">
+              <label>
+                Nombre de la maquina
+                <input id="machineNameInput" type="text" autocomplete="off">
+              </label>
+              <label>
+                Comision bancaria (%)
+                <input id="bankCommissionInput" type="number" min="0" step="0.01" inputmode="decimal">
+              </label>
+              <label>
+                Recordar gasolina cada visitas
+                <input id="fuelReminderEveryInput" type="number" min="0" step="1" inputmode="numeric">
+              </label>
+              <label>
+                Derecho de piso mensual
+                <input id="monthlyFloorCostInput" type="number" min="0" step="0.01" inputmode="decimal">
+              </label>
+              <button class="save-date-button" id="saveSettingsButton" type="button">Guardar configuracion</button>
+              <div class="settings-actions">
+                <button id="exportMachineButton" type="button">Exportar maquina</button>
+                <button id="importMachineButton" type="button">Importar maquina</button>
+              </div>
+              <section class="danger-zone">
+                <h3>Datos de esta maquina</h3>
+                <button class="clear-data-button" id="resetMachineButton" type="button">Reset de maquina</button>
+              </section>
+            </div>
+          </article>
+        </section>
+      </section>
       <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
       <dialog class="slot-dialog" id="slotDialog" aria-labelledby="slotDialogTitle">
@@ -202,6 +287,6 @@
 
     </main>
     <script src="convex-config.js?v=20260601-convex-sync"></script>
-    <script src="script.js?v=20260602-product-image-cache"></script>
+    <script src="script.js?v=20260602-multimachine-settings"></script>
   </body>
 </html>

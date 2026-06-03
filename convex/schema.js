@@ -11,6 +11,13 @@ export default defineSchema({
   maquinas: defineTable({
     idMaquina: v.string(),
     nombreMaquina: v.string(),
+    status: v.string(),
+    deletedAt: v.union(v.number(), v.null()),
+    settings: v.object({
+      bankCommissionPercent: v.number(),
+      fuelReminderEveryVisits: v.number(),
+      monthlyFloorCost: v.number()
+    }),
     configuracionFilas: v.array(v.object({
       fila: v.string(),
       espacios: v.number()

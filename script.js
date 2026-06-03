@@ -43,6 +43,16 @@ const preloadedProductImages = new Set();
 const productColors = ["#46b8ff", "#35e79a", "#f8c45c", "#ef7b8c", "#b98cff", "#72dfdf", "#ff9d5c", "#a6f06f"];
 const monthNamesShort = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 const baseProductLayout = {};
+const defaultMachineSettings = {
+  bankCommissionPercent: 3,
+  fuelReminderEveryVisits: 4,
+  monthlyFloorCost: 0
+};
+const defaultGlobalSettings = {
+  currency: "USD",
+  language: null,
+  visualPreferences: {}
+};
 
 const rowSizes = [5, 5, 10, 10, 10, 10];
 const rowLetters = ["A", "B", "C", "D", "E", "F"];
@@ -76,15 +86,17 @@ const appMenu = document.getElementById("appMenu");
 const menuBackdrop = document.getElementById("menuBackdrop");
 const generateReport = document.getElementById("generateReport");
 const toast = document.getElementById("toast");
-const fillTestStock = document.getElementById("fillTestStock");
-const clearTestData = document.getElementById("clearTestData");
 const mainViewButton = document.getElementById("mainViewButton");
 const machineSwitcher = document.getElementById("machineSwitcher");
+const machineMenuList = document.getElementById("machineMenuList");
 const productsViewButton = document.getElementById("productsViewButton");
+const settingsViewButton = document.getElementById("settingsViewButton");
 const backToMain = document.getElementById("backToMain");
 const backToMainFromProducts = document.getElementById("backToMainFromProducts");
+const backToMainFromSettings = document.getElementById("backToMainFromSettings");
 const accountingView = document.getElementById("accountingView");
 const productsView = document.getElementById("productsView");
+const settingsView = document.getElementById("settingsView");
 const mainView = document.querySelector(".theme-operator");
 const accountingChart = document.getElementById("accountingChart");
 const operatingExpenses = document.getElementById("operatingExpenses");
@@ -97,6 +109,25 @@ const productNameInput = document.getElementById("productNameInput");
 const productCostInput = document.getElementById("productCostInput");
 const productPriceInput = document.getElementById("productPriceInput");
 const productsTable = document.getElementById("productsTable");
+const zeroStatePanel = document.getElementById("zeroStatePanel");
+const zeroCreateMachine = document.getElementById("zeroCreateMachine");
+const currencyInput = document.getElementById("currencyInput");
+const languageInput = document.getElementById("languageInput");
+const visualPreferencesInput = document.getElementById("visualPreferencesInput");
+const machineCreateForm = document.getElementById("machineCreateForm");
+const newMachineNameInput = document.getElementById("newMachineNameInput");
+const inheritMachineSelect = document.getElementById("inheritMachineSelect");
+const machineAdminList = document.getElementById("machineAdminList");
+const machineSettingsEmpty = document.getElementById("machineSettingsEmpty");
+const machineSettingsForm = document.getElementById("machineSettingsForm");
+const machineNameInput = document.getElementById("machineNameInput");
+const bankCommissionInput = document.getElementById("bankCommissionInput");
+const fuelReminderEveryInput = document.getElementById("fuelReminderEveryInput");
+const monthlyFloorCostInput = document.getElementById("monthlyFloorCostInput");
+const saveSettingsButton = document.getElementById("saveSettingsButton");
+const exportMachineButton = document.getElementById("exportMachineButton");
+const importMachineButton = document.getElementById("importMachineButton");
+const resetMachineButton = document.getElementById("resetMachineButton");
 let showAllHistory = false;
 let activeMonthCard = null;
 let expandedSalesCard = null;
@@ -114,6 +145,8 @@ function stateHasUserData(appState) {
     appState.records?.length
     || appState.monthClosures?.length
     || appState.yearClosures?.length
+    || appState.machines?.length
+    || appState.products?.length
     || appState.pendingProducts?.length
     || appState.pendingProductsEffectiveMonth
   );
@@ -138,6 +171,10 @@ function applyRemoteState(remoteState) {
   Object.assign(state, normalized);
   syncProductCatalog();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function uniqueId(prefix) {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
 async function convexRequest(type, path, args) {
@@ -212,23 +249,82 @@ function queueConvexSave() {
   }, 400);
 }
 
-function normalizeState(savedState) {
+function normalizeMachineSettings(settings = {}) {
   return {
-    records: savedState.records || [],
-    monthClosures: savedState.monthClosures || [],
-    yearClosures: savedState.yearClosures || [],
-    machines: savedState.machines || [{ id: "kc-01", name: "KC Machines" }],
-    activeMachineId: savedState.activeMachineId || "kc-01",
-    products: normalizeProducts(savedState.products),
-    pendingProducts: Array.isArray(savedState.pendingProducts) ? normalizeProducts(savedState.pendingProducts) : null,
+    bankCommissionPercent: Number(settings.bankCommissionPercent ?? defaultMachineSettings.bankCommissionPercent),
+    fuelReminderEveryVisits: Math.max(0, Number(settings.fuelReminderEveryVisits ?? defaultMachineSettings.fuelReminderEveryVisits)),
+    monthlyFloorCost: Number(settings.monthlyFloorCost ?? defaultMachineSettings.monthlyFloorCost)
+  };
+}
+
+function normalizeMachine(machine, index = 0) {
+  const id = String(machine?.id || machine?.idMaquina || "").trim() || uniqueId("machine");
+  const name = String(machine?.name || machine?.nombreMaquina || `Maquina ${index + 1}`).trim() || `Maquina ${index + 1}`;
+  return {
+    id,
+    name,
+    status: machine?.status || (machine?.active === false ? "inactive" : "active"),
+    deletedAt: machine?.deletedAt || null,
+    settings: normalizeMachineSettings(machine?.settings || machine?.configuracion || {})
+  };
+}
+
+function normalizeMachines(savedMachines) {
+  if (!Array.isArray(savedMachines)) return [];
+  const seen = new Set();
+  return savedMachines
+    .map(normalizeMachine)
+    .filter((machine) => machine.id && !seen.has(machine.id) && seen.add(machine.id) && !machine.deletedAt);
+}
+
+function normalizeGlobalSettings(settings = {}) {
+  return {
+    currency: String(settings.currency || defaultGlobalSettings.currency).trim().toUpperCase() || "USD",
+    language: settings.language || null,
+    visualPreferences: settings.visualPreferences && typeof settings.visualPreferences === "object" ? settings.visualPreferences : {}
+  };
+}
+
+function normalizeMachineProductIds(savedIds, machines, normalizedProducts) {
+  const productNames = normalizedProducts.map((product) => product.name);
+  const byMachine = {};
+  const hasSavedMap = savedIds && typeof savedIds === "object" && !Array.isArray(savedIds);
+
+  machines.forEach((machine) => {
+    const raw = hasSavedMap && Array.isArray(savedIds[machine.id]) ? savedIds[machine.id] : null;
+    byMachine[machine.id] = raw
+      ? raw.map(normalizeProductName).filter((name, index, arr) => name && arr.indexOf(name) === index)
+      : hasSavedMap ? [] : productNames.slice();
+  });
+
+  return byMachine;
+}
+
+function normalizeState(savedState) {
+  const normalizedProducts = normalizeProducts(savedState.products, { useDefaults: !("products" in savedState) });
+  const machines = normalizeMachines(savedState.machines);
+  const activeMachineId = machines.some((machine) => machine.id === savedState.activeMachineId)
+    ? savedState.activeMachineId
+    : machines.find((machine) => machine.status === "active")?.id || machines[0]?.id || null;
+
+  return {
+    records: (savedState.records || []).map((record) => ({ ...record, machineId: record.machineId || activeMachineId })),
+    monthClosures: (savedState.monthClosures || []).map((closure) => ({ ...closure, machineId: closure.machineId || activeMachineId })),
+    yearClosures: (savedState.yearClosures || []).map((closure) => ({ ...closure, machineId: closure.machineId || activeMachineId })),
+    machines,
+    activeMachineId,
+    globalSettings: normalizeGlobalSettings(savedState.globalSettings),
+    machineProductIds: normalizeMachineProductIds(savedState.machineProductIds, machines, normalizedProducts),
+    products: normalizedProducts,
+    pendingProducts: Array.isArray(savedState.pendingProducts) ? normalizeProducts(savedState.pendingProducts, { useDefaults: false }) : null,
     pendingProductsEffectiveMonth: savedState.pendingProductsEffectiveMonth || null,
     seedScenario: savedState.seedScenario || null,
     updatedAt: Number(savedState.updatedAt || 0)
   };
 }
 
-function normalizeProducts(savedProducts) {
-  const source = Array.isArray(savedProducts) && savedProducts.length ? savedProducts : defaultProducts;
+function normalizeProducts(savedProducts, options = {}) {
+  const source = Array.isArray(savedProducts) ? savedProducts : options.useDefaults ? defaultProducts : [];
   const seen = new Set();
 
   return source
@@ -244,6 +340,51 @@ function syncProductCatalog() {
   products = normalizeProducts(state.products);
   state.products = products;
   productOrder = new Map(products.map((product, index) => [product.name, index]));
+}
+
+function activeMachine() {
+  return state.machines.find((machine) => machine.id === state.activeMachineId && machine.status !== "inactive" && !machine.deletedAt) || null;
+}
+
+function activeMachineSettings() {
+  return normalizeMachineSettings(activeMachine()?.settings);
+}
+
+function activeMachineName() {
+  return activeMachine()?.name || "Sin maquina";
+}
+
+function activeMachineProductNames() {
+  const machine = activeMachine();
+  if (!machine) return [];
+  return Array.isArray(state.machineProductIds?.[machine.id]) ? state.machineProductIds[machine.id] : [];
+}
+
+function activeProducts() {
+  const assigned = new Set(activeMachineProductNames());
+  return products.filter((product) => assigned.has(product.name));
+}
+
+function ensureProductAssignedToActiveMachine(productName) {
+  const machine = activeMachine();
+  if (!machine || !productName) return;
+  if (!state.machineProductIds[machine.id]) state.machineProductIds[machine.id] = [];
+  if (!state.machineProductIds[machine.id].includes(productName)) {
+    state.machineProductIds[machine.id].push(productName);
+  }
+}
+
+function updateMachineChrome() {
+  machineSwitcher.textContent = activeMachineName();
+  document.body.classList.toggle("no-active-machine", !activeMachine());
+  zeroStatePanel.hidden = Boolean(activeMachine());
+  renderMachineMenu();
+}
+
+function machineScoped(items, key = "date") {
+  const machine = activeMachine();
+  if (!machine) return [];
+  return (items || []).filter((item) => item.machineId === machine.id || item.idMaquina === machine.id);
 }
 
 function applyPendingCatalogForDate(dateValue) {
@@ -266,6 +407,16 @@ function catalogDraftEffectiveMonth() {
 }
 
 function scheduleCatalogChange(nextProducts, message) {
+  if (!machineScoped(state.records).length && !machineScoped(state.monthClosures).length && !machineScoped(state.yearClosures).length) {
+    state.products = normalizeProducts(nextProducts);
+    syncProductCatalog();
+    saveState();
+    renderProductsEditor();
+    buildMachine();
+    updateSummary();
+    showToast(message);
+    return;
+  }
   const effectiveMonth = catalogDraftEffectiveMonth();
   state.pendingProducts = normalizeProducts(nextProducts);
   state.pendingProductsEffectiveMonth = effectiveMonth;
@@ -653,7 +804,7 @@ function buildNextStockFromDetails(details) {
 
 function latestYearClosureBefore(date) {
   const activeYear = Number(yearKey(date));
-  return [...state.yearClosures]
+  return [...machineScoped(state.yearClosures)]
     .filter((closure) => Number(closure.year) < activeYear)
     .sort((a, b) => b.year.localeCompare(a.year))[0];
 }
@@ -701,9 +852,10 @@ function resetStateData() {
       localStorage.removeItem(key);
     }
   });
-  state.records = [];
-  state.monthClosures = [];
-  state.yearClosures = [];
+  const machine = activeMachine();
+  state.records = machine ? state.records.filter((record) => record.machineId && record.machineId !== machine.id) : [];
+  state.monthClosures = machine ? state.monthClosures.filter((closure) => closure.machineId && closure.machineId !== machine.id) : [];
+  state.yearClosures = machine ? state.yearClosures.filter((closure) => closure.machineId && closure.machineId !== machine.id) : [];
   state.pendingProducts = null;
   state.pendingProductsEffectiveMonth = null;
   state.seedScenario = null;
@@ -723,11 +875,11 @@ function percent(value) {
 
 function monthRecords(dateValue) {
   const activeMonth = monthKey(dateValue);
-  return state.records.filter((record) => monthKey(record.date) === activeMonth);
+  return machineScoped(state.records).filter((record) => monthKey(record.date) === activeMonth);
 }
 
 function monthRecordsByKey(key) {
-  return state.records.filter((record) => monthKey(record.date) === key);
+  return machineScoped(state.records).filter((record) => monthKey(record.date) === key);
 }
 
 function productForSlot(code) {
@@ -744,7 +896,7 @@ function productColor(productName) {
   return productColors[index % productColors.length];
 }
 
-function productOptionsFromCatalog(selectedProduct, catalogProducts = products) {
+function productOptionsFromCatalog(selectedProduct, catalogProducts = activeProducts()) {
   const emptyOption = `<option value="${EMPTY_PRODUCT}"${selectedProduct === EMPTY_PRODUCT ? " selected" : ""}>EMPTY</option>`;
   const knownProducts = catalogProducts.map((product) => `
     <option value="${product.name}"${product.name === selectedProduct ? " selected" : ""}>${product.name}</option>
@@ -969,18 +1121,18 @@ function formatDate(dateValue) {
 }
 
 function getRecord(date) {
-  return state.records.find((record) => record.date === date);
+  return machineScoped(state.records).find((record) => record.date === date);
 }
 
 function getPreviousRecord(date) {
-  return [...state.records]
+  return [...machineScoped(state.records)]
     .filter((record) => record.date < date)
     .sort((a, b) => b.date.localeCompare(a.date))[0] || null;
 }
 
 function isMonthClosed(date) {
-  return state.monthClosures.some((closure) => closure.month === monthKey(date))
-    || state.yearClosures.some((closure) => closure.year === yearKey(date));
+  return machineScoped(state.monthClosures, "month").some((closure) => closure.month === monthKey(date))
+    || machineScoped(state.yearClosures, "year").some((closure) => closure.year === yearKey(date));
 }
 
 function isDateLocked(date) {
@@ -1073,6 +1225,12 @@ function loadDate(date) {
   document.body.classList.toggle("month-locked", isDateLocked(date));
   fuelInput.value = existing ? Number(existing.fuelCost || 0) || "" : "";
   updateFuelReminder();
+  updateMachineChrome();
+  updateStock.disabled = !activeMachine();
+  saveDateChanges.disabled = !activeMachine();
+  stockStatus.textContent = activeMachine()
+    ? stockStatus.textContent
+    : "Crea una maquina para iniciar la operacion.";
 }
 
 function updateDateButton() {
@@ -1524,7 +1682,7 @@ function renderSalesList() {
 
 function renderHistory() {
   const activeMonth = monthKey(visitDate.value);
-  const rows = [...state.records]
+  const rows = [...machineScoped(state.records)]
     .filter((record) => monthKey(record.date) === activeMonth)
     .sort((a, b) => b.date.localeCompare(a.date));
   const visibleRows = showAllHistory ? rows : rows.slice(0, 3);
@@ -1566,14 +1724,15 @@ function renderHistory() {
 
 function visitNumberForDate(date) {
   const existing = Boolean(getRecord(date));
-  const dates = new Set(state.records.map((record) => record.date));
+  const dates = new Set(machineScoped(state.records).map((record) => record.date));
   if (!existing) dates.add(date);
   return [...dates].filter((item) => item <= date).sort((a, b) => a.localeCompare(b)).indexOf(date) + 1;
 }
 
 function updateFuelReminder() {
   const visitNumber = visitNumberForDate(visitDate.value);
-  const shouldRemind = visitNumber > 0 && visitNumber % 4 === 0 && !isMonthClosed(visitDate.value);
+  const every = Number(activeMachineSettings().fuelReminderEveryVisits || 0);
+  const shouldRemind = every > 0 && visitNumber > 0 && visitNumber % every === 0 && !isMonthClosed(visitDate.value);
 
   fuelReminder.hidden = !shouldRemind;
   if (!shouldRemind && !fuelInput.value) fuelInput.value = "";
@@ -1581,7 +1740,7 @@ function updateFuelReminder() {
 
 function productReportOrder(extraProducts = []) {
   const seen = new Set();
-  const order = products.map((product) => product.name);
+  const order = activeProducts().map((product) => product.name);
 
   extraProducts.forEach((productName) => {
     if (productName && !seen.has(productName) && !order.includes(productName)) order.push(productName);
@@ -1593,7 +1752,7 @@ function productReportOrder(extraProducts = []) {
 function productTotalsForRecords(records) {
   const totals = new Map();
 
-  products.forEach((product) => {
+  activeProducts().forEach((product) => {
     totals.set(product.name, {
       product: product.name,
       sold: 0,
@@ -1664,6 +1823,7 @@ function recordsSoldTotal(records) {
 }
 
 function accountingSummaryForRecords(records, overrides = {}) {
+  const commissionPercent = Number(overrides.bankCommissionPercent ?? activeMachineSettings().bankCommissionPercent);
   const productTotals = productTotalsForRecords(records);
   const totalRevenue = productTotals.reduce((sum, item) => sum + Number(item.revenue || 0), 0);
   const totalCost = productTotals.reduce((sum, item) => sum + Number(item.expense || 0), 0);
@@ -1671,9 +1831,11 @@ function accountingSummaryForRecords(records, overrides = {}) {
   const fuelTotal = "fuelTotal" in overrides
     ? Number(overrides.fuelTotal || 0)
     : records.reduce((sum, record) => sum + Number(record.fuelCost || 0), 0);
-  const floorFee = Number(overrides.floorFee || 0);
+  const floorFee = "floorFee" in overrides
+    ? Number(overrides.floorFee || 0)
+    : Number(activeMachineSettings().monthlyFloorCost || 0);
   const cardSales = Number(overrides.cardSales || 0);
-  const bankFee = cardSales * 0.03;
+  const bankFee = cardSales * (commissionPercent / 100);
   const grossProfit = profitability - floorFee - fuelTotal - bankFee;
   const profitPercent = totalRevenue > 0 ? (profitability / totalRevenue) * 100 : 0;
 
@@ -1688,6 +1850,7 @@ function accountingSummaryForRecords(records, overrides = {}) {
     floorFee,
     cardSales,
     bankFee,
+    bankCommissionPercent: commissionPercent,
     grossProfit
   };
 }
@@ -1695,8 +1858,251 @@ function accountingSummaryForRecords(records, overrides = {}) {
 function setMenuOpen(isOpen) {
   appMenu.hidden = !isOpen;
   menuBackdrop.hidden = !isOpen;
+  if (!isOpen) machineMenuList.hidden = true;
   document.body.classList.toggle("menu-open", isOpen);
   menuToggle.setAttribute("aria-expanded", String(isOpen));
+}
+
+function renderMachineMenu() {
+  const activeMachines = state.machines.filter((machine) => machine.status !== "inactive");
+  const inactiveMachines = state.machines.filter((machine) => machine.status === "inactive");
+  const row = (machine) => `
+    <button type="button" data-switch-machine="${machine.id}"${machine.id === state.activeMachineId ? " disabled" : ""}>
+      ${escapeHtml(machine.name)}${machine.status === "inactive" ? " (inactiva)" : ""}
+    </button>
+  `;
+  machineMenuList.innerHTML = `
+    ${activeMachines.length ? activeMachines.map(row).join("") : `<span>No hay maquinas activas</span>`}
+    ${inactiveMachines.length ? inactiveMachines.map(row).join("") : ""}
+    <button type="button" data-open-settings="create">Crear maquina</button>
+  `;
+  machineMenuList.querySelectorAll("[data-switch-machine]").forEach((button) => {
+    button.addEventListener("click", () => switchActiveMachine(button.dataset.switchMachine));
+  });
+  machineMenuList.querySelector("[data-open-settings]")?.addEventListener("click", showSettingsView);
+}
+
+function switchActiveMachine(machineId) {
+  const machine = state.machines.find((item) => item.id === machineId);
+  if (!machine) return;
+  state.activeMachineId = machine.id;
+  saveState();
+  updateMachineChrome();
+  loadDate(visitDate.value);
+  setMenuOpen(false);
+  showToast(`Maquina activa: ${machine.name}`);
+}
+
+function renderSettings() {
+  currencyInput.value = state.globalSettings.currency || "USD";
+  languageInput.value = state.globalSettings.language || "";
+  visualPreferencesInput.value = "";
+  inheritMachineSelect.innerHTML = `
+    <option value="">Iniciar desde cero</option>
+    ${state.machines.map((machine) => `<option value="${machine.id}">Heredar productos de ${escapeHtml(machine.name)}</option>`).join("")}
+  `;
+
+  const machine = activeMachine();
+  machineSettingsEmpty.hidden = Boolean(machine);
+  machineSettingsForm.hidden = !machine;
+  if (machine) {
+    machineNameInput.value = machine.name;
+    bankCommissionInput.value = Number(machine.settings.bankCommissionPercent || 0);
+    fuelReminderEveryInput.value = Number(machine.settings.fuelReminderEveryVisits || 0);
+    monthlyFloorCostInput.value = Number(machine.settings.monthlyFloorCost || 0);
+  }
+
+  machineAdminList.innerHTML = state.machines.length ? state.machines.map((item) => `
+    <article class="machine-admin-row">
+      <div>
+        <strong>${escapeHtml(item.name)}</strong>
+        <span>${item.status === "inactive" ? "Inactiva" : "Activa"} · ${state.machineProductIds[item.id]?.length || 0} productos</span>
+      </div>
+      <button type="button" data-admin-switch="${item.id}"${item.id === state.activeMachineId ? " disabled" : ""}>Usar</button>
+      <button type="button" data-admin-toggle="${item.id}">${item.status === "inactive" ? "Restaurar" : "Inactivar"}</button>
+      <button class="clear-data-button" type="button" data-admin-delete="${item.id}">Eliminar</button>
+    </article>
+  `).join("") : `<div class="products-empty">No hay maquinas.</div>`;
+
+  machineAdminList.querySelectorAll("[data-admin-switch]").forEach((button) => {
+    button.addEventListener("click", () => switchActiveMachine(button.dataset.adminSwitch));
+  });
+  machineAdminList.querySelectorAll("[data-admin-toggle]").forEach((button) => {
+    button.addEventListener("click", () => toggleMachineStatus(button.dataset.adminToggle));
+  });
+  machineAdminList.querySelectorAll("[data-admin-delete]").forEach((button) => {
+    button.addEventListener("click", () => deleteMachinePermanently(button.dataset.adminDelete));
+  });
+}
+
+function createMachine(name, sourceMachineId = "") {
+  const cleanName = String(name || "").trim();
+  if (!cleanName) {
+    showToast("Escribe el nombre de la maquina");
+    return null;
+  }
+  const machine = normalizeMachine({
+    id: uniqueId("machine"),
+    name: cleanName,
+    status: "active",
+    settings: defaultMachineSettings
+  }, state.machines.length);
+  state.machines.push(machine);
+  state.machineProductIds[machine.id] = sourceMachineId && state.machineProductIds[sourceMachineId]
+    ? state.machineProductIds[sourceMachineId].slice()
+    : [];
+  state.activeMachineId = machine.id;
+  saveState();
+  updateMachineChrome();
+  loadDate(visitDate.value);
+  renderSettings();
+  return machine;
+}
+
+function handleCreateMachine(event) {
+  event.preventDefault();
+  const machine = createMachine(newMachineNameInput.value, inheritMachineSelect.value);
+  if (!machine) return;
+  machineCreateForm.reset();
+  showToast("Maquina creada");
+}
+
+function saveSettings() {
+  state.globalSettings = normalizeGlobalSettings({
+    currency: currencyInput.value,
+    language: languageInput.value || null,
+    visualPreferences: state.globalSettings.visualPreferences
+  });
+  const machine = activeMachine();
+  if (machine) {
+    machine.name = String(machineNameInput.value || machine.name).trim() || machine.name;
+    machine.settings = normalizeMachineSettings({
+      bankCommissionPercent: bankCommissionInput.value,
+      fuelReminderEveryVisits: fuelReminderEveryInput.value,
+      monthlyFloorCost: monthlyFloorCostInput.value
+    });
+  }
+  saveState();
+  updateMachineChrome();
+  updateFuelReminder();
+  renderSettings();
+  showToast("Configuracion guardada");
+}
+
+function toggleMachineStatus(machineId) {
+  const machine = state.machines.find((item) => item.id === machineId);
+  if (!machine) return;
+  machine.status = machine.status === "inactive" ? "active" : "inactive";
+  if (machine.id === state.activeMachineId && machine.status === "inactive") {
+    state.activeMachineId = state.machines.find((item) => item.status === "active")?.id || null;
+  }
+  if (!state.activeMachineId && machine.status === "active") state.activeMachineId = machine.id;
+  saveState();
+  updateMachineChrome();
+  renderSettings();
+  loadDate(visitDate.value);
+}
+
+function resetActiveMachineData() {
+  const machine = activeMachine();
+  if (!machine) return;
+  const typed = window.prompt(`Escribe ${machine.name} para limpiar el historial operativo de esta maquina.`);
+  if (typed !== machine.name) {
+    showToast("Reset cancelado");
+    return;
+  }
+  state.records = state.records.filter((record) => record.machineId !== machine.id);
+  state.monthClosures = state.monthClosures.filter((closure) => closure.machineId !== machine.id);
+  state.yearClosures = state.yearClosures.filter((closure) => closure.machineId !== machine.id);
+  saveState();
+  visitDate.value = todayValue();
+  loadDate(visitDate.value);
+  showMainView();
+  showToast("Maquina reiniciada");
+}
+
+function deleteMachinePermanently(machineId) {
+  const machine = state.machines.find((item) => item.id === machineId);
+  if (!machine) return;
+  const typed = window.prompt(`Escribe ${machine.name} para eliminar definitivamente esta maquina.`);
+  if (typed !== machine.name) {
+    showToast("Eliminacion cancelada");
+    return;
+  }
+  state.machines = state.machines.filter((item) => item.id !== machine.id);
+  delete state.machineProductIds[machine.id];
+  state.records = state.records.filter((record) => record.machineId !== machine.id);
+  state.monthClosures = state.monthClosures.filter((closure) => closure.machineId !== machine.id);
+  state.yearClosures = state.yearClosures.filter((closure) => closure.machineId !== machine.id);
+  if (state.activeMachineId === machine.id) {
+    state.activeMachineId = state.machines.find((item) => item.status === "active")?.id || state.machines[0]?.id || null;
+  }
+  saveState();
+  updateMachineChrome();
+  renderSettings();
+  loadDate(visitDate.value);
+  showToast("Maquina eliminada");
+}
+
+function exportActiveMachine() {
+  const machine = activeMachine();
+  if (!machine) return;
+  const payload = {
+    globalSettings: { currency: state.globalSettings.currency },
+    machine,
+    products: products.filter((product) => activeMachineProductNames().includes(product.name)),
+    machineProductIds: activeMachineProductNames(),
+    records: machineScoped(state.records),
+    monthClosures: machineScoped(state.monthClosures),
+    yearClosures: machineScoped(state.yearClosures)
+  };
+  navigator.clipboard?.writeText(JSON.stringify(payload, null, 2))
+    .then(() => showToast("Backup de maquina copiado"))
+    .catch(() => showToast("No se pudo copiar el backup"));
+}
+
+function importActiveMachine() {
+  const machine = activeMachine();
+  if (!machine) return;
+  const raw = window.prompt(`Pega el backup JSON para restaurar ${machine.name}.`);
+  if (!raw) return;
+  try {
+    const payload = JSON.parse(raw);
+    const backupMachine = payload.machine || {};
+    machine.settings = normalizeMachineSettings(backupMachine.settings || machine.settings);
+    machine.name = String(backupMachine.name || machine.name).trim() || machine.name;
+    if (payload.globalSettings?.currency) {
+      state.globalSettings.currency = String(payload.globalSettings.currency).trim().toUpperCase();
+    }
+    if (Array.isArray(payload.products)) {
+      const merged = new Map(products.map((product) => [product.name, product]));
+      normalizeProducts(payload.products).forEach((product) => merged.set(product.name, product));
+      state.products = [...merged.values()];
+      syncProductCatalog();
+    }
+    state.machineProductIds[machine.id] = Array.isArray(payload.machineProductIds)
+      ? payload.machineProductIds.map(normalizeProductName).filter(Boolean)
+      : (payload.products || []).map((product) => normalizeProductName(product.name || product.nombreProducto)).filter(Boolean);
+    state.records = [
+      ...state.records.filter((record) => record.machineId !== machine.id),
+      ...(payload.records || []).map((record) => ({ ...record, machineId: machine.id }))
+    ];
+    state.monthClosures = [
+      ...state.monthClosures.filter((closure) => closure.machineId !== machine.id),
+      ...(payload.monthClosures || []).map((closure) => ({ ...closure, machineId: machine.id }))
+    ];
+    state.yearClosures = [
+      ...state.yearClosures.filter((closure) => closure.machineId !== machine.id),
+      ...(payload.yearClosures || []).map((closure) => ({ ...closure, machineId: machine.id }))
+    ];
+    saveState();
+    renderSettings();
+    loadDate(visitDate.value);
+    showToast("Backup restaurado");
+  } catch (error) {
+    console.warn("Machine import failed", error);
+    showToast("Backup invalido");
+  }
 }
 
 function showMainView() {
@@ -1704,6 +2110,8 @@ function showMainView() {
   mainView.classList.add("active");
   accountingView.hidden = true;
   productsView.hidden = true;
+  settingsView.hidden = true;
+  updateMachineChrome();
   setMenuOpen(false);
 }
 
@@ -1712,6 +2120,7 @@ function showAccountingView() {
   mainView.classList.remove("active");
   accountingView.hidden = false;
   productsView.hidden = true;
+  settingsView.hidden = true;
   renderAccounting();
   setMenuOpen(false);
 }
@@ -1721,7 +2130,18 @@ function showProductsView() {
   mainView.classList.remove("active");
   accountingView.hidden = true;
   productsView.hidden = false;
+  settingsView.hidden = true;
   renderProductsEditor();
+  setMenuOpen(false);
+}
+
+function showSettingsView() {
+  mainView.hidden = true;
+  mainView.classList.remove("active");
+  accountingView.hidden = true;
+  productsView.hidden = true;
+  settingsView.hidden = false;
+  renderSettings();
   setMenuOpen(false);
 }
 
@@ -1799,6 +2219,9 @@ function saveProductEdit(index) {
   }
 
   draftProducts[index] = nextProduct;
+  Object.keys(state.machineProductIds || {}).forEach((machineId) => {
+    state.machineProductIds[machineId] = (state.machineProductIds[machineId] || []).map((name) => name === oldName ? nextName : name);
+  });
   scheduleCatalogChange(draftProducts, "Producto actualizado");
 }
 
@@ -1821,6 +2244,9 @@ function deleteProduct(index) {
   if (!confirmed) return;
 
   draftProducts.splice(index, 1);
+  Object.keys(state.machineProductIds || {}).forEach((machineId) => {
+    state.machineProductIds[machineId] = (state.machineProductIds[machineId] || []).filter((name) => name !== product.name);
+  });
   scheduleCatalogChange(draftProducts, "Producto eliminado");
 }
 
@@ -1842,6 +2268,7 @@ function addProduct(event) {
     cost: Number(productCostInput.value || 0),
     price: Number(productPriceInput.value || 0)
   });
+  ensureProductAssignedToActiveMachine(name);
   productForm.reset();
   scheduleCatalogChange(draftProducts, "Producto agregado al final");
 }
@@ -1859,6 +2286,7 @@ function summaryFromClosure(closure) {
     floorFee: Number(closure.floorFee || 0),
     cardSales: Number(closure.cardSales || 0),
     bankFee: Number(closure.bankFee || 0),
+    bankCommissionPercent: Number(closure.bankCommissionPercent ?? activeMachineSettings().bankCommissionPercent),
     grossProfit: Number(closure.grossProfit || 0),
     productTotals: closure.productTotals || [],
     productOrderSnapshot: closure.productOrderSnapshot || productReportOrder((closure.productTotals || []).map((item) => item.product)),
@@ -1867,7 +2295,7 @@ function summaryFromClosure(closure) {
 }
 
 function yearSummaryFromMonths(months) {
-  const productTotals = products.map((product) => ({
+  const productTotals = activeProducts().map((product) => ({
     product: product.name,
     sold: 0,
     price: product.price,
@@ -1951,9 +2379,9 @@ function compactMonthSummary(month) {
 function annualChartItems(year) {
   return monthNamesShort.map((label, index) => {
     const month = `${year}-${String(index + 1).padStart(2, "0")}`;
-    const yearClosure = state.yearClosures.find((item) => item.year === year);
+    const yearClosure = machineScoped(state.yearClosures).find((item) => item.year === year);
     const compactMonth = yearClosure?.monthSummaries?.find((item) => item.month === month);
-    const closure = state.monthClosures.find((item) => item.month === month);
+    const closure = machineScoped(state.monthClosures).find((item) => item.month === month);
     return {
       month,
       label,
@@ -2000,7 +2428,7 @@ function renderAccounting() {
     lastDate: [...records].sort((a, b) => b.date.localeCompare(a.date))[0]?.date || null,
     closed: isMonthClosed(activeMonth)
   };
-  const closedMonths = [...state.monthClosures]
+  const closedMonths = [...machineScoped(state.monthClosures)]
     .sort((a, b) => b.month.localeCompare(a.month))
     .map((closure) => ({
       type: "closed",
@@ -2010,7 +2438,7 @@ function renderAccounting() {
       closedAt: closure.closedAt,
       closure
   }));
-  const finishedYears = [...state.yearClosures]
+  const finishedYears = [...machineScoped(state.yearClosures)]
     .sort((a, b) => b.year.localeCompare(a.year))
     .map((closure) => ({
       type: "year",
@@ -2221,7 +2649,7 @@ function openCloseMonthForm() {
   const confirmCloseMonth = host.querySelector("#confirmCloseMonth");
 
   cardSalesInput.value = "";
-  floorFeeInput.value = "";
+  floorFeeInput.value = Number(activeMachineSettings().monthlyFloorCost || 0).toFixed(2);
   fuelTotalInput.value = summary.fuelTotal.toFixed(2);
   closeMonthForm.hidden = false;
   const update = () => updateClosePreview(host);
@@ -2251,7 +2679,7 @@ function updateClosePreview(scope = document) {
   closePreview.innerHTML = `
     <div><span>Venta total</span><strong>${money(summary.totalRevenue)}</strong></div>
     <div><span>Rentabilidad total</span><strong>${money(summary.profitability)}</strong><small>${percent(summary.profitPercent)} de ganancia</small></div>
-    <div><span>Comision tarjeta 3%</span><strong>${money(summary.bankFee)}</strong></div>
+    <div><span>Comision tarjeta ${percent(summary.bankCommissionPercent)}</span><strong>${money(summary.bankFee)}</strong></div>
     <div><span>Ganancia bruta</span><strong>${money(summary.grossProfit)}</strong></div>
   `;
 }
@@ -2282,6 +2710,7 @@ function finalizeMonthClosure() {
     fuelTotal: monthCards.querySelector("#fuelTotalInput")?.value
   });
   const closure = {
+    machineId: activeMachine()?.id || null,
     month: selectedMonth,
     closedAt: todayValue(),
     sourceDate: closingRecord.date,
@@ -2293,12 +2722,13 @@ function finalizeMonthClosure() {
     profitability: summary.profitability,
     cardSales: summary.cardSales,
     bankFee: summary.bankFee,
+    bankCommissionPercent: summary.bankCommissionPercent,
     floorFee: summary.floorFee,
     fuelTotal: summary.fuelTotal,
     grossProfit: summary.grossProfit,
     openingStockNextMonth: recordNextStock(closingRecord)
   };
-  const existingIndex = state.monthClosures.findIndex((item) => item.month === selectedMonth);
+  const existingIndex = state.monthClosures.findIndex((item) => item.month === selectedMonth && (!item.machineId || item.machineId === activeMachine()?.id));
 
   if (existingIndex >= 0) {
     state.monthClosures[existingIndex] = closure;
@@ -2308,12 +2738,13 @@ function finalizeMonthClosure() {
 
   if (selectedMonth.endsWith("-12")) {
     const closedYear = yearKey(selectedMonth);
-    const monthsInYear = state.monthClosures
+    const monthsInYear = machineScoped(state.monthClosures)
       .filter((item) => yearKey(item.month) === closedYear)
       .sort((a, b) => a.month.localeCompare(b.month))
       .map((item) => ({ ...item, summary: summaryFromClosure(item) }));
     const yearSummary = yearSummaryFromMonths(monthsInYear);
     const yearClosure = {
+      machineId: activeMachine()?.id || null,
       year: closedYear,
       month: closedYear,
       closedAt: todayValue(),
@@ -2326,13 +2757,14 @@ function finalizeMonthClosure() {
       profitability: yearSummary.profitability,
       cardSales: yearSummary.cardSales,
       bankFee: yearSummary.bankFee,
+      bankCommissionPercent: summary.bankCommissionPercent,
       floorFee: yearSummary.floorFee,
       fuelTotal: yearSummary.fuelTotal,
       grossProfit: yearSummary.grossProfit,
       monthSummaries: monthsInYear.map(compactMonthSummary),
       openingStockNextYear: closure.openingStockNextMonth
     };
-    const existingYearIndex = state.yearClosures.findIndex((item) => item.year === closedYear);
+    const existingYearIndex = state.yearClosures.findIndex((item) => item.year === closedYear && (!item.machineId || item.machineId === activeMachine()?.id));
 
     if (existingYearIndex >= 0) {
       state.yearClosures[existingYearIndex] = yearClosure;
@@ -2340,8 +2772,8 @@ function finalizeMonthClosure() {
       state.yearClosures.push(yearClosure);
     }
 
-    state.monthClosures = state.monthClosures.filter((item) => yearKey(item.month) !== closedYear);
-    state.records = state.records.filter((item) => yearKey(item.date) !== closedYear);
+    state.monthClosures = state.monthClosures.filter((item) => item.machineId !== activeMachine()?.id || yearKey(item.month) !== closedYear);
+    state.records = state.records.filter((item) => item.machineId !== activeMachine()?.id || yearKey(item.date) !== closedYear);
   }
 
   saveState();
@@ -2367,7 +2799,7 @@ function salesColumnForCurrentMonth() {
 }
 
 async function copySalesColumn(month) {
-  const report = state.monthClosures.find((item) => item.month === month);
+  const report = machineScoped(state.monthClosures).find((item) => item.month === month);
   if (!report) return;
 
   try {
@@ -2482,6 +2914,7 @@ function currentRecord() {
     && ![...previousProductStockMap(visitDate.value).values()].some((entry) => Number(entry?.stock || 0) > 0);
 
   return {
+    machineId: activeMachine()?.id || null,
     date: visitDate.value,
     type: isInitialLoad ? "carga_inicial" : "visita_real",
     status: "closed",
@@ -2538,6 +2971,12 @@ function validateRequiredCaptures() {
 }
 
 function saveSelectedDate() {
+  if (!activeMachine()) {
+    stockStatus.textContent = "Primero crea una maquina.";
+    showToast("Crea una maquina para guardar datos");
+    showSettingsView();
+    return;
+  }
   if (isMonthClosed(visitDate.value)) {
     stockStatus.textContent = "Este mes ya fue cerrado. No se pueden guardar cambios.";
     return;
@@ -2550,7 +2989,7 @@ function saveSelectedDate() {
   if (!validateRequiredCaptures()) return;
 
   const record = currentRecord();
-  const index = state.records.findIndex((item) => item.date === record.date);
+  const index = state.records.findIndex((item) => item.date === record.date && item.machineId === record.machineId);
   const isUpdate = index >= 0;
 
   if (isUpdate) {
@@ -2562,50 +3001,6 @@ function saveSelectedDate() {
   saveState();
   loadDate(record.date);
   if (isUpdate) showToast("Datos actualizados");
-}
-
-function fillCurrentDateWithTestStock() {
-  if (isDateLocked(visitDate.value)) {
-    setMenuOpen(false);
-    showToast("Datos cerrados: edicion bloqueada");
-    return;
-  }
-
-  currentSlots.filter(isRepresentativeSlot).forEach((slot, index) => {
-    const detail = currentVisitDetails.get(slot.product);
-    const previous = Number(detail?.stockAnterior || 0);
-    const found = previous > 0 ? Math.max(previous - ((index % 4) + 1), 0) : 0;
-    const left = Math.max(found, 7 + ((index + 2) % 5));
-
-    if (detail) {
-      detail.SM = found;
-      detail.NS = left;
-      detail.UV = previous - found;
-      detail.captured = true;
-      detail.status = "ok";
-      detail.note = "";
-      currentVisitDetails.set(slot.product, detail);
-    }
-  });
-
-  applyVisitDetailsToSlots();
-  ensureCaptureSlots();
-  buildMachine();
-  setMenuOpen(false);
-  updateSummary();
-  showToast("Stock de prueba insertado");
-}
-
-function clearAllTestData() {
-  const confirmed = window.confirm("Seguro que quieres limpiar todos los datos guardados?");
-  if (!confirmed) return;
-
-  resetStateData();
-  visitDate.value = todayValue();
-  loadDate(visitDate.value);
-  showMainView();
-  setMenuOpen(false);
-  showToast("Datos limpiados");
 }
 
 function showToast(message) {
@@ -2635,14 +3030,20 @@ generateReport.addEventListener("click", () => {
 mainViewButton.addEventListener("click", showMainView);
 productsViewButton.addEventListener("click", showProductsView);
 machineSwitcher.addEventListener("click", () => {
-  showToast("Cambio de maquina disponible en una proxima version");
-  setMenuOpen(false);
+  machineMenuList.hidden = !machineMenuList.hidden;
+  renderMachineMenu();
 });
 backToMain.addEventListener("click", showMainView);
 backToMainFromProducts.addEventListener("click", showMainView);
+backToMainFromSettings.addEventListener("click", showMainView);
 productForm.addEventListener("submit", addProduct);
-fillTestStock.addEventListener("click", fillCurrentDateWithTestStock);
-clearTestData.addEventListener("click", clearAllTestData);
+settingsViewButton.addEventListener("click", showSettingsView);
+zeroCreateMachine.addEventListener("click", showSettingsView);
+machineCreateForm.addEventListener("submit", handleCreateMachine);
+saveSettingsButton.addEventListener("click", saveSettings);
+resetMachineButton.addEventListener("click", resetActiveMachineData);
+exportMachineButton.addEventListener("click", exportActiveMachine);
+importMachineButton.addEventListener("click", importActiveMachine);
 function openVisitDatePicker() {
   try {
     if (typeof visitDate.showPicker === "function") {

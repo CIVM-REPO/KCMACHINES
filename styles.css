@@ -964,6 +964,144 @@ h2 {
   font-size: 13px;
 }
 
+.machine-menu-list {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.machine-menu-list[hidden] {
+  display: none;
+}
+
+.machine-menu-list span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.zero-state-panel {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(53, 231, 154, 0.08);
+}
+
+.zero-state-panel[hidden] {
+  display: none;
+}
+
+.zero-state-panel h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.zero-state-panel p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.settings-view {
+  display: grid;
+  gap: 18px;
+}
+
+.settings-view[hidden] {
+  display: none;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  padding: 18px;
+}
+
+.settings-panel {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.settings-panel label,
+.machine-create-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.settings-panel input,
+.settings-panel select {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: rgba(0, 0, 0, 0.24);
+  color: var(--text);
+  font-weight: 850;
+}
+
+.machine-create-form,
+.settings-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.machine-admin-list {
+  display: grid;
+  gap: 8px;
+}
+
+.machine-admin-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.14);
+}
+
+.machine-admin-row div {
+  display: grid;
+  gap: 3px;
+}
+
+.machine-admin-row span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.danger-zone {
+  display: grid;
+  gap: 10px;
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(239, 123, 140, 0.35);
+}
+
+.danger-zone h3 {
+  margin: 0;
+  color: #ffd7dd;
+  font-size: 13px;
+}
+
 .sidebar,
 .entry-panel,
 .machine-panel,
@@ -1148,13 +1286,12 @@ body.editing-existing .vending-glass::before {
 
 .machine-action-row {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr;
   gap: 8px;
 }
 
 .update-stock-button,
 .save-date-button,
-.test-stock-button,
 .clear-data-button {
   min-height: 44px;
   border: 1px solid rgba(53, 231, 154, 0.5);
@@ -1162,13 +1299,6 @@ body.editing-existing .vending-glass::before {
   background: rgba(53, 231, 154, 0.18);
   color: #d9fff0;
   font-weight: 900;
-}
-
-.test-stock-button {
-  min-width: 118px;
-  border-color: rgba(248, 196, 92, 0.5);
-  background: rgba(248, 196, 92, 0.13);
-  color: #ffe8aa;
 }
 
 .clear-data-button {
@@ -2163,6 +2293,16 @@ input {
 }
 
 @media (max-width: 760px) {
+  .settings-grid,
+  .machine-admin-row {
+    grid-template-columns: 1fr;
+  }
+
+  .zero-state-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   html,
   body {
     overflow-x: hidden;
@@ -2400,26 +2540,14 @@ input {
   }
 
   .machine-action-row {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 0.82fr);
+    grid-template-columns: 1fr;
   }
 
   .update-stock-button,
-  .save-date-button,
-  .test-stock-button,
-  .clear-data-button {
+  .save-date-button {
     min-height: 46px;
     padding: 0 8px;
     font-size: 12px;
-  }
-
-  .test-stock-button,
-  .clear-data-button {
-    min-width: 0;
-  }
-
-  .clear-data-button {
-    grid-column: 1 / -1;
-    min-height: 38px;
   }
 
   .machine-actions p {
