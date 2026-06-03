@@ -1,9 +1,9 @@
 KC MACHINE SELLS CONTROL - ARQUITECTURA DE LA APP
-Actualizado: 2026-06-02
+Actualizado: 2026-06-03
 
 PRINCIPIO CENTRAL
 
-Separar tres responsabilidades:
+Separar cuatro responsabilidades:
 
 1. Matriz visual
    Responde: que producto aparece en que espacio fisico.
@@ -14,7 +14,11 @@ Separar tres responsabilidades:
 3. Contabilidad historica
    Responde: cuanto se vendio por producto y visita.
 
+4. Contexto de maquina
+   Responde: sobre que maquina activa opera la misma logica visual, temporal y contable.
+
 La matriz visual no calcula ventas directamente.
+No se duplica la logica por maquina; la app filtra/guarda datos por machineId y opera sobre activeMachineId.
 
 FORMULA CONTABLE UNICA
 
@@ -39,6 +43,7 @@ Hay 50 espacios fisicos.
 
 Cada espacio tiene selector de producto.
 La matriz inicial esta vacia porque baseProductLayout = {}.
+Los selectores toman productos asignados a la maquina activa, no todo el catalogo global.
 
 FUSION VISUAL
 
@@ -113,8 +118,60 @@ Si existe stock anterior:
 
 ORDEN CONTABLE
 
-El orden contable viene del catalogo de productos y maquina_productos.
+El orden contable viene del catalogo de productos y maquina_productos/machineProductIds de la maquina activa.
 No depende del orden visual de la matriz.
+
+CATALOGO Y RELACION MAQUINA-PRODUCTO
+
+Concepto actual:
+- products: catalogo global.
+- machineProductIds: relacion frontend por id de maquina.
+- maquina_productos: relacion normalizada en Convex.
+
+Crear maquina desde cero:
+- Crea la maquina.
+- No asigna productos.
+- No copia matriz.
+- No copia visitas, detalles, cierres, stock ni ventas.
+
+Crear maquina heredando productos:
+- Crea la maquina.
+- Copia solo la relacion producto-maquina desde otra maquina.
+- No duplica productos globales.
+- No copia historial ni stock.
+
+CONFIGURACION
+
+globalSettings contiene preferencias generales:
+- currency
+- language futuro
+- visualPreferences futuro
+
+machine.settings contiene datos operativos:
+- bankCommissionPercent
+- fuelReminderEveryVisits
+- monthlyFloorCost
+
+La comision bancaria se calcula con la configuracion de la maquina activa.
+El derecho de piso mensual se usa como sugerencia al cerrar mes.
+El cierre mensual guarda el valor usado como snapshot en floorFee y la comision usada en bankCommissionPercent para que el historico no cambie si luego cambia la configuracion.
+
+RESET / INACTIVACION / ELIMINACION
+
+Reset de maquina:
+- Limpia records, monthClosures y yearClosures de esa maquina.
+- Conserva maquina, settings, productos asignados y catalogo global.
+
+Inactivar maquina:
+- Cambia status a inactive.
+- No borra datos.
+- La maquina deja de ser operativa normal hasta restaurarse.
+
+Eliminar maquina:
+- Borra la maquina del appState.
+- Borra relaciones machineProductIds de esa maquina.
+- Borra registros y cierres de esa maquina.
+- Permite que queden cero maquinas.
 
 PRODUCTOS CON HISTORIAL
 
@@ -123,4 +180,3 @@ Los productos con historial no deben borrarse fisicamente. Deben quedar inactivo
 
 Estado actual:
 El frontend todavia conserva compatibilidad con catalogo programado por mes, pero la base normalizada ya tiene campo activo/activoEnMaquina para evolucionar esta regla.
-

@@ -1,5 +1,5 @@
 KC MACHINE SELLS CONTROL - PRUEBAS Y OPERACION
-Actualizado: 2026-06-02
+Actualizado: 2026-06-03
 
 COMANDOS BASICOS
 
@@ -20,12 +20,17 @@ Actualizar Convex dev usado por la app:
 Resetear datos de prueba en Convex conservando catalogo:
 - npm.cmd run convex:reset-pruebas
 
+Advertencia:
+- agentes/migracion/reset-convex-pruebas.mjs conserva compatibilidad con la semilla historica y aun puede reconstruir kc-01 si el estado remoto no trae machines/activeMachineId.
+- No usar ese script para validar estado cero real sin revisarlo antes.
+
 Auditar tablas normalizadas:
 
 node -e "const url='https://trustworthy-dinosaur-668.convex.cloud'; fetch(url+'/api/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:'appState:normalizedCounts',args:{},format:'json'})}).then(r=>r.json()).then(j=>{if(j.status==='error') throw new Error(j.errorMessage); console.log(JSON.stringify(j.value,null,2));})"
 
 ESTADO ESPERADO DESPUES DE RESET
 
+Con el script de pruebas actual, si se conserva semilla:
 - maquinas: 1
 - productos: 31
 - maquina_productos: 31
@@ -41,19 +46,32 @@ En la app:
 - dateStatus indica fecha nueva sin refill previo.
 - stockStatus indica que se puede insertar datos.
 
+Estado cero permitido por el modelo:
+- maquinas: 0
+- productos: 0
+- maquina_productos: 0
+- matriz_visual: 0
+- visitas: 0
+- detalle_visita: 0
+
+En estado cero:
+- No debe aparecer kc-01 creado automaticamente.
+- El selector muestra "Sin maquina".
+- La pantalla principal muestra crear primera maquina.
+- Guardar visita debe pedir crear maquina primero.
+
 PRUEBA 1 - CARGA INICIAL
 
 Objetivo:
 Verificar que primer guardado no genera ventas.
 
 Pasos:
-1. Resetear Convex.
-2. Abrir app.
-3. Asignar productos a algunos espacios.
-4. Abrir representante de cada producto.
-5. Dejar SM = 0.
-6. Dejar NS > 0.
-7. Guardar.
+1. Abrir app con una maquina activa y productos asignados.
+2. Asignar productos a algunos espacios.
+3. Abrir representante de cada producto.
+4. Dejar SM = 0.
+5. Dejar NS > 0.
+6. Guardar.
 
 Esperado:
 - Se crea 1 visita.
@@ -151,6 +169,9 @@ Pasos:
 
 Esperado:
 - monthClosures tiene resumen.
+- monthClosures tiene machineId.
+- bankFee usa machine.settings.bankCommissionPercent.
+- floorFee queda guardado como snapshot del valor usado.
 - Mes queda bloqueado.
 - openingStockNextMonth viene del ultimo NS.
 
@@ -169,6 +190,107 @@ Esperado:
 - productos y maquina_productos se mantienen.
 - matriz_visual sigue en 50.
 
+PRUEBA 9 - ESTADO CERO Y CREAR MAQUINA
+
+Objetivo:
+Verificar que la app puede arrancar sin maquinas ni catalogo.
+
+Pasos:
+1. Limpiar appState/localStorage en un entorno de prueba.
+2. Abrir app.
+3. Confirmar que no se crea kc-01.
+4. Ir a Configuracion.
+5. Crear primera maquina desde cero.
+
+Esperado:
+- activeMachineId queda con el id de la nueva maquina.
+- machineProductIds de esa maquina inicia vacio.
+- No hay records ni cierres.
+- La pantalla principal se habilita para esa maquina.
+
+PRUEBA 10 - CREAR MAQUINA HEREDANDO PRODUCTOS
+
+Objetivo:
+Verificar que heredar productos no copia historial.
+
+Pasos:
+1. Tener una maquina origen con productos y visitas.
+2. Crear nueva maquina heredando productos de la origen.
+3. Cambiar a la nueva maquina.
+
+Esperado:
+- La nueva maquina tiene relacion de productos.
+- No tiene records.
+- No tiene cierres.
+- No tiene stock historico.
+- Matriz inicia limpia.
+
+PRUEBA 11 - CAMBIO DE MAQUINA
+
+Objetivo:
+Verificar aislamiento operativo.
+
+Pasos:
+1. Guardar una visita en maquina A.
+2. Crear/cambiar a maquina B.
+3. Revisar historial, resumen e informes.
+
+Esperado:
+- Maquina B no muestra historial de A.
+- Informes de B no incluyen cierres ni ventas de A.
+- Volver a A muestra sus datos.
+
+PRUEBA 12 - CONFIGURACION DE MAQUINA
+
+Objetivo:
+Verificar settings operativos.
+
+Pasos:
+1. En Configuracion de maquina actual, cambiar comision bancaria.
+2. Cambiar recordatorio de gasolina.
+3. Cambiar derecho de piso mensual.
+4. Guardar.
+5. Abrir cierre mensual.
+
+Esperado:
+- El texto de comision muestra el porcentaje configurado.
+- bankFee se calcula con ese porcentaje.
+- floorFeeInput se precarga con monthlyFloorCost.
+- El recordatorio de gasolina usa fuelReminderEveryVisits.
+
+PRUEBA 13 - RESET DE MAQUINA
+
+Objetivo:
+Verificar que reset limpia historial sin borrar productos asignados.
+
+Pasos:
+1. Tener maquina con productos asignados, visitas y cierres.
+2. Ir a Configuracion.
+3. Reset de maquina.
+4. Escribir exactamente el nombre de la maquina.
+
+Esperado:
+- records/monthClosures/yearClosures de esa maquina quedan vacios.
+- La maquina y sus settings se conservan.
+- Los productos asignados se conservan.
+- El catalogo global se conserva.
+
+PRUEBA 14 - INACTIVAR Y ELIMINAR
+
+Objetivo:
+Verificar administracion de maquinas.
+
+Pasos:
+1. Inactivar maquina activa.
+2. Restaurarla.
+3. Eliminar definitivamente una maquina escribiendo su nombre.
+
+Esperado:
+- Inactivar no borra datos.
+- Restaurar permite volver a usarla.
+- Eliminar borra maquina, relacion de productos y datos operativos de esa maquina.
+- Si era la ultima maquina, la app vuelve a estado cero.
+
 RIESGOS OPERATIVOS
 
 1. Deployment equivocado.
@@ -186,3 +308,11 @@ RIESGOS OPERATIVOS
 5. Produccion.
    No se ha configurado frontend contra perceptive-wren-156. Si se decide usar prod, actualizar convex-config.js y variables correspondientes.
 
+6. Schema Convex.
+   El commit efcf934 agrega campos a maquinas. Despues de cambios de schema, ejecutar npx.cmd convex dev --once contra trustworthy-dinosaur-668 antes de depender de esos campos en remoto.
+
+7. Pruebas visuales locales.
+   En una verificacion se intento abrir localhost con Browser integrado y fue bloqueado por ERR_BLOCKED_BY_CLIENT. El servidor respondio 200 en prueba temporal con PowerShell, pero conviene probar manualmente en navegador local.
+
+8. Script de reset de pruebas.
+   El script agentes/migracion/reset-convex-pruebas.mjs fue conservado por compatibilidad, pero todavia tiene fallback historico a kc-01. Si el objetivo es probar estado cero puro, ajustar o evitar ese script.

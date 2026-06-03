@@ -1,5 +1,5 @@
 KC MACHINE SELLS CONTROL - MEMORIA PARA SIGUIENTE CONTEXTO
-Actualizado: 2026-06-02
+Actualizado: 2026-06-03
 
 PROPOSITO
 
@@ -25,6 +25,11 @@ Leer en este orden:
 6. 06_PRUEBAS_Y_OPERACION.txt
    Pruebas manuales, comandos, reset de Convex y verificaciones recomendadas.
 
+CAMBIO RECIENTE IMPORTANTE
+
+- Commit efcf934 Prepare multi-machine settings model
+  Introduce base multi-maquina en appState/Convex, vista de Configuracion, selector de maquina activa, estado cero, settings por maquina, reset por maquina y elimina el boton de stock de prueba.
+
 ARCHIVOS INTENCIONALMENTE CONSERVADOS
 
 - agentes/migracion/reset-convex-pruebas.mjs
@@ -33,4 +38,3 @@ ARCHIVOS INTENCIONALMENTE CONSERVADOS
 ARCHIVOS VIEJOS ELIMINADOS
 
 Se eliminaron documentos antiguos de arquitectura, pruebas, handoff y recomendaciones porque describian el modelo anterior basado en slots/salesMovements o estaban incompletos despues de la migracion a visitDetails y tablas reales de Convex.
-

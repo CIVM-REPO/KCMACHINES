@@ -802,6 +802,159 @@ function buildNextStockFromDetails(details) {
     }));
 }
 
+function cloneRecord(record) {
+  return JSON.parse(JSON.stringify(record));
+}
+
+function detailHasDependentData(detail) {
+  return Number(detail.stockAnterior || 0) > 0
+    || Number(detail.SM || 0) > 0
+    || Number(detail.UV || 0) > 0;
+}
+
+function recordStockEntriesByProduct(record) {
+  return new Map(recordNextStock(record).map((entry) => [entry.product, entry]));
+}
+
+function slotsWithRecalculatedDetails(record, details) {
+  const detailsByProduct = new Map(details.map((detail) => [detail.product, detail]));
+
+  return (record.slotsSnapshot || record.slots || []).map((slot) => {
+    const detail = detailsByProduct.get(slot.product);
+    const isRepresentative = Boolean(detail)
+      && detail.representative !== "SR"
+      && detail.representative === slot.code;
+    const previousStock = Number(detail?.stockAnterior || 0);
+    const found = isRepresentative ? Number(detail.SM || 0) : 0;
+    const left = isRepresentative ? Number(detail.NS || 0) : 0;
+    const captured = isRepresentative ? Boolean(detail.captured) : false;
+
+    return {
+      ...slot,
+      previousProduct: slot.product,
+      previousStock,
+      previousPrice: Number(detail?.price ?? slot.previousPrice ?? slot.price ?? productCatalogItem(slot.product)?.price ?? 0),
+      previousCost: Number(detail?.cost ?? slot.previousCost ?? slot.cost ?? productCatalogItem(slot.product)?.cost ?? 0),
+      currentPrice: Number(slot.currentPrice ?? detail?.price ?? productCatalogItem(slot.product)?.price ?? 0),
+      currentCost: Number(slot.currentCost ?? detail?.cost ?? productCatalogItem(slot.product)?.cost ?? 0),
+      found,
+      left,
+      sold: isRepresentative ? Math.max(previousStock - found, 0) : 0,
+      hasEntry: isRepresentative && (captured || previousStock > 0 || left > 0),
+      foundCaptured: captured,
+      salesEntry: captured,
+      stockEntry: isRepresentative && (captured || left > 0),
+      counted: isRepresentative,
+      salesCounted: isRepresentative,
+      stockCounted: isRepresentative
+    };
+  });
+}
+
+function rebuildRecordFromDetails(record, details, type = record.type) {
+  const recalculatedDetails = details.map((detail) => ({ ...detail }));
+  const slotsSnapshot = slotsWithRecalculatedDetails(record, recalculatedDetails);
+
+  return {
+    ...record,
+    type,
+    slots: slotsSnapshot,
+    slotsSnapshot,
+    visitDetails: recalculatedDetails,
+    salesMovements: type === "carga_inicial" ? [] : buildSalesMovementsFromDetails(recalculatedDetails),
+    nextStock: buildNextStockFromDetails(recalculatedDetails)
+  };
+}
+
+function recalculateRecordFromPrevious(record, previousRecord) {
+  const previousStock = recordStockEntriesByProduct(previousRecord);
+  const hasPreviousStock = [...previousStock.values()].some((entry) => Number(entry.stock || 0) > 0);
+  const details = recordVisitDetails(record);
+  const detailsByProduct = new Map(details.map((detail) => [detail.product, detail]));
+
+  for (const [product, stockEntry] of previousStock) {
+    if (Number(stockEntry.stock || 0) > 0 && !detailsByProduct.has(product)) {
+      return {
+        ok: false,
+        message: `${formatDate(record.date)} no tiene captura para ${product}, pero la visita anterior deja stock de ese producto.`
+      };
+    }
+  }
+
+  const recalculatedDetails = details.map((detail) => {
+    const stockEntry = previousStock.get(detail.product);
+    const nextStockAnterior = Number(stockEntry?.stock || 0);
+
+    if (nextStockAnterior === 0 && detailHasDependentData(detail)) {
+      return {
+        ...detail,
+        status: "error",
+        note: `${detail.product} ya no tiene stock anterior desde la visita previa`
+      };
+    }
+
+    const SM = Number(detail.SM || 0);
+    const UV = nextStockAnterior - SM;
+    return {
+      ...detail,
+      stockAnterior: nextStockAnterior,
+      UV,
+      status: UV < 0 ? "error" : detail.captured ? "ok" : "pending",
+      note: UV < 0 ? "SM mayor que stock anterior" : "",
+      price: Number(detail.price ?? stockEntry?.price ?? productCatalogItem(detail.product)?.price ?? 0),
+      cost: Number(detail.cost ?? stockEntry?.cost ?? productCatalogItem(detail.product)?.cost ?? 0)
+    };
+  });
+
+  const conflict = recalculatedDetails.find((detail) => detail.status === "error");
+  if (conflict) {
+    return {
+      ok: false,
+      message: `${formatDate(record.date)} queda incoherente en ${conflict.product}: ${conflict.note}.`
+    };
+  }
+
+  const pending = recalculatedDetails.find((detail) => detail.status === "pending");
+  if (pending) {
+    return {
+      ok: false,
+      message: `${formatDate(record.date)} queda pendiente en ${pending.product}; falta una captura valida.`
+    };
+  }
+
+  return {
+    ok: true,
+    record: rebuildRecordFromDetails(record, recalculatedDetails, hasPreviousStock ? "visita_real" : "carga_inicial")
+  };
+}
+
+function recalculateFollowingOpenRecords(records, startRecord) {
+  const machineId = startRecord.machineId;
+  const updatedRecords = records.map(cloneRecord);
+  let previousRecord = cloneRecord(startRecord);
+  const followingRecords = updatedRecords
+    .filter((record) => record.machineId === machineId && record.date > startRecord.date)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  for (const record of followingRecords) {
+    if (isMonthClosed(record.date)) {
+      return {
+        ok: false,
+        message: `No se puede guardar porque la cadena llega a un mes cerrado: ${monthKey(record.date)}.`
+      };
+    }
+
+    const result = recalculateRecordFromPrevious(record, previousRecord);
+    if (!result.ok) return result;
+
+    const index = updatedRecords.findIndex((item) => item.machineId === machineId && item.date === record.date);
+    updatedRecords[index] = result.record;
+    previousRecord = result.record;
+  }
+
+  return { ok: true, records: updatedRecords };
+}
+
 function latestYearClosureBefore(date) {
   const activeYear = Number(yearKey(date));
   return [...machineScoped(state.yearClosures)]
@@ -1136,7 +1289,7 @@ function isMonthClosed(date) {
 }
 
 function isDateLocked(date) {
-  return isMonthClosed(date) || Boolean(getRecord(date));
+  return isMonthClosed(date);
 }
 
 function previousStockMap(date) {
@@ -2981,26 +3134,31 @@ function saveSelectedDate() {
     stockStatus.textContent = "Este mes ya fue cerrado. No se pueden guardar cambios.";
     return;
   }
-  if (getRecord(visitDate.value)) {
-    stockStatus.textContent = "Esta fecha ya fue cerrada. No se pueden guardar cambios.";
-    showToast("Fecha cerrada: datos bloqueados");
-    return;
-  }
   if (!validateRequiredCaptures()) return;
 
   const record = currentRecord();
-  const index = state.records.findIndex((item) => item.date === record.date && item.machineId === record.machineId);
+  const recordsDraft = state.records.map(cloneRecord);
+  const index = recordsDraft.findIndex((item) => item.date === record.date && item.machineId === record.machineId);
   const isUpdate = index >= 0;
 
   if (isUpdate) {
-    state.records[index] = record;
+    recordsDraft[index] = record;
   } else {
-    state.records.push(record);
+    recordsDraft.push(record);
   }
 
+  const chainResult = recalculateFollowingOpenRecords(recordsDraft, record);
+  if (!chainResult.ok) {
+    stockStatus.textContent = chainResult.message;
+    showToast("No se guardo: conflicto con visita posterior");
+    return;
+  }
+
+  state.records = chainResult.records;
   saveState();
   loadDate(record.date);
   if (isUpdate) showToast("Datos actualizados");
+  else showToast("Datos guardados");
 }
 
 function showToast(message) {

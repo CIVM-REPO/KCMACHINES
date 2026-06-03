@@ -1,15 +1,37 @@
 KC MACHINE SELLS CONTROL - FLUJOS Y REGLAS
-Actualizado: 2026-06-02
+Actualizado: 2026-06-03
 
 FLUJO DE ARRANQUE
 
 1. script.js define STORAGE_KEY.
 2. loadState() lee localStorage.
-3. Se normaliza el estado.
+3. Se normaliza el estado, maquinas, globalSettings, machineProductIds y machineId en registros viejos.
 4. Se sincroniza catalogo con syncProductCatalog().
-5. loadDate(visitDate.value) pinta la pantalla.
+5. loadDate(visitDate.value) pinta la pantalla para la maquina activa, o estado cero si no hay maquina activa.
 6. loadStateFromConvex() intenta traer estado remoto.
 7. Si remoto gana, applyRemoteState() reemplaza estado local y repinta.
+
+ESTADO CERO
+
+Si activeMachineId es null o no existe maquina activa:
+- No se puede guardar visita.
+- La pantalla principal muestra un panel para crear maquina.
+- El boton principal de la hamburguesa muestra "Sin maquina".
+- La vista Configuracion permite crear la primera maquina.
+
+No se crea kc-01 automaticamente.
+
+SELECTOR DE MAQUINA
+
+El boton machineSwitcher en la hamburguesa:
+- Muestra el nombre de la maquina activa.
+- Abre una lista de maquinas.
+- Permite cambiar activeMachineId.
+- Incluye acceso a crear maquina desde Configuracion.
+
+Al cambiar de maquina:
+- saveState() persiste activeMachineId.
+- loadDate() repinta matriz, historial, resumen y cierres filtrados por machineId.
 
 REGLA LOCAL VS REMOTO
 
@@ -27,8 +49,8 @@ Funcion:
 Hace:
 1. Aplica cambios pendientes de catalogo si corresponden.
 2. Precarga imagenes de productos.
-3. Lee record existente si hay.
-4. Calcula stock anterior por producto.
+3. Lee record existente de la maquina activa si hay.
+4. Calcula stock anterior por producto usando registros/cierres de la maquina activa.
 5. Construye currentSlots desde buildDefaultSlots().
 6. Crea currentVisitDetails con createVisitDetailsForDate().
 7. Aplica detalles a slots.
@@ -38,8 +60,8 @@ Hace:
 CARGA INICIAL
 
 Condicion:
-- No hay record previo.
-- No hay stock anterior.
+- No hay record previo para la maquina activa.
+- No hay stock anterior para la maquina activa.
 
 Resultado al guardar:
 - type = carga_inicial
@@ -133,6 +155,7 @@ Funcion:
 - saveSelectedDate()
 
 Antes de guardar:
+0. Rechaza si no hay maquina activa.
 1. Rechaza mes cerrado.
 2. Rechaza fecha ya guardada.
 3. Ejecuta validateRequiredCaptures().
@@ -141,6 +164,7 @@ Registro final:
 - currentRecord()
 
 currentRecord guarda:
+- machineId
 - date
 - type
 - status
@@ -160,25 +184,82 @@ Funcion:
 Usa:
 - accountingSummaryForRecords(records)
 - recordNextStock(closingRecord)
+- activeMachineSettings()
 
 Guarda:
 - monthClosures
+- machineId
 - openingStockNextMonth
 - productTotals
 - metricas de venta/costo/rentabilidad/gastos
+- bankCommissionPercent usado
+- floorFee usado como snapshot
+
+La comision bancaria viene de machine.settings.bankCommissionPercent.
+El derecho de piso se precarga desde machine.settings.monthlyFloorCost, pero el valor final guardado en el cierre puede editarse.
 
 Si se cierra diciembre:
 - crea yearClosures
 - compacta meses del anio
-- limpia records del anio cerrado
+- limpia records del anio cerrado solo de la maquina activa
 
 CATALOGO
 
 Cambios de productos:
-- Se programan para el siguiente mes mediante pendingProducts.
+- Si la maquina activa no tiene historial ni cierres, se aplican inmediatamente para facilitar estado cero.
+- Si ya hay historial/cierres, se programan para el siguiente mes mediante pendingProducts.
 
 Motivo:
 - Evitar cambiar columnas/precios dentro del mes actual.
+
+Al agregar un producto desde Productos, tambien se asigna a la maquina activa si existe.
+Los selectores visuales muestran activeProducts(), no todo products.
+
+CONFIGURACION
+
+Vista:
+- settingsView
+
+Global:
+- Moneda.
+- Espacio de idioma futuro.
+- Espacio de preferencias visuales futuras.
+- Crear maquinas desde cero o heredando productos.
+- Inactivar/restaurar/eliminar maquinas.
+
+Maquina actual:
+- Nombre.
+- Comision bancaria.
+- Recordatorio de gasolina cada N visitas.
+- Derecho de piso mensual.
+- Exportar/importar backup de esa maquina.
+- Reset de esa maquina con confirmacion por nombre.
+
+RESET DE MAQUINA
+
+Funcion:
+- resetActiveMachineData()
+
+Limpia:
+- records de la maquina activa.
+- monthClosures de la maquina activa.
+- yearClosures de la maquina activa.
+
+Conserva:
+- Maquina.
+- Settings.
+- machineProductIds.
+- Catalogo global.
+- Productos, precios y costos.
+
+ELIMINAR MAQUINA
+
+Funcion:
+- deleteMachinePermanently(machineId)
+
+Requiere escribir el nombre de la maquina.
+Borra esa maquina, su relacion machineProductIds y sus registros/cierres.
+Permite que queden cero maquinas.
 
 INFORMES
 
@@ -189,4 +270,3 @@ Los informes usan helpers compatibles:
 
 Si record tiene visitDetails, los movimientos salen de UV y stock sale de NS.
 Si record es viejo, hay fallback.
-

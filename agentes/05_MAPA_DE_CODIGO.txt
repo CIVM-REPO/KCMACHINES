@@ -1,5 +1,5 @@
 KC MACHINE SELLS CONTROL - MAPA DE CODIGO
-Actualizado: 2026-06-02
+Actualizado: 2026-06-03
 
 ARCHIVOS PRINCIPALES
 
@@ -10,11 +10,13 @@ index.html
 - Carga script.js con cache-buster.
 
 styles.css
-- Layout visual, maquina, dialogos, informes, productos, responsive.
+- Layout visual, maquina, dialogos, informes, productos, configuracion, estado cero y responsive.
 
 script.js
 - Estado local.
 - Sincronizacion Convex.
+- Modelo multi-maquina.
+- Configuracion global y por maquina.
 - Matriz visual.
 - Captura de visita.
 - Contabilidad.
@@ -43,6 +45,11 @@ FUNCIONES IMPORTANTES EN script.js
 Estado/sync:
 - loadState()
 - normalizeState()
+- normalizeMachines()
+- normalizeMachine()
+- normalizeMachineSettings()
+- normalizeGlobalSettings()
+- normalizeMachineProductIds()
 - syncProductCatalog()
 - saveState()
 - loadStateFromConvex()
@@ -53,6 +60,9 @@ Estado/sync:
 
 Catalogo:
 - normalizeProducts()
+- activeProducts()
+- activeMachineProductNames()
+- ensureProductAssignedToActiveMachine()
 - catalogSnapshot()
 - catalogForRecord()
 - productCatalogItem()
@@ -75,6 +85,24 @@ Matriz/slots:
 - visualGroupsForRow()
 - visualSlotForGroup()
 - slotCodeSelectorMarkup()
+
+Maquinas/configuracion:
+- activeMachine()
+- activeMachineSettings()
+- activeMachineName()
+- updateMachineChrome()
+- renderMachineMenu()
+- switchActiveMachine()
+- renderSettings()
+- createMachine()
+- handleCreateMachine()
+- saveSettings()
+- toggleMachineStatus()
+- resetActiveMachineData()
+- deleteMachinePermanently()
+- exportActiveMachine()
+- importActiveMachine()
+- showSettingsView()
 
 Representantes y detalles:
 - representativeMapForSlots()
@@ -108,6 +136,7 @@ Dialogo captura:
 Guardar visita:
 - currentRecord()
 - saveSelectedDate()
+- machineScoped()
 
 Resumen/historial:
 - updateSummary()
@@ -141,9 +170,12 @@ Mutation:
 Normalizacion:
 - normalizedProducts()
 - machineList()
+- machineProductIds()
+- recordsForMachine()
 - defaultVisualMatrix()
 - visualMatrixFromState()
 - visitDetailsForRecord()
+- deleteMachineBundle()
 - syncNormalizedState()
 
 PUNTOS DE CUIDADO
@@ -155,4 +187,8 @@ PUNTOS DE CUIDADO
 5. Si se cambia la version de script.js, actualizar cache-buster en index.html.
 6. Si se cambian imagenes, actualizar productImageVersion.
 7. Si se cambia schema Convex, ejecutar npx.cmd convex dev --once contra el deployment usado.
-
+8. No reintroducir kc-01 como fallback obligatorio.
+9. No mezclar records/monthClosures/yearClosures entre maquinas; usar machineScoped() en frontend.
+10. No asignar todo products a la maquina activa si existe machineProductIds.
+11. Reset de maquina no borra catalogo ni productos asignados.
+12. El boton Stock de prueba fue eliminado y no debe volver a operacion diaria.

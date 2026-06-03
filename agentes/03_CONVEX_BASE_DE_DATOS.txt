@@ -1,5 +1,5 @@
 KC MACHINE SELLS CONTROL - CONVEX Y BASE DE DATOS
-Actualizado: 2026-06-02
+Actualizado: 2026-06-03
 
 ARCHIVOS
 
@@ -41,12 +41,20 @@ Guarda maquinas vending.
 Campos:
 - idMaquina
 - nombreMaquina
+- status
+- deletedAt
+- settings
+  - bankCommissionPercent
+  - fuelReminderEveryVisits
+  - monthlyFloorCost
 - configuracionFilas
 - createdAt
 - updatedAt
 
 Estado actual:
-- 1 maquina: kc-01 / KC Machines
+- La base de prueba puede tener 1 maquina historica.
+- El modelo ya permite cero maquinas.
+- No asumir kc-01 como fallback obligatorio.
 
 3. productos
 
@@ -79,6 +87,8 @@ Campos:
 Uso:
 - Define orden contable estable.
 - Evita depender del orden visual.
+- Se sincroniza desde appState.machineProductIds para la maquina activa.
+- Si appState viejo no trae machineProductIds, se conserva compatibilidad asignando productos existentes a la maquina durante normalizacion.
 
 5. matriz_visual
 
@@ -158,14 +168,29 @@ Se ejecuta dentro de appState.save.
 Hace:
 1. Normaliza maquinas.
 2. Normaliza productos.
-3. Crea/actualiza maquina_productos.
-4. Reescribe matriz_visual desde el ultimo record si existe, o matriz vacia.
-5. Reescribe visitas desde appState.records.
-6. Reescribe detalle_visita desde record.visitDetails.
+3. Elimina de tablas normalizadas datos de maquinas que ya no existan en appState.
+4. Crea/actualiza maquina_productos de la maquina activa segun machineProductIds.
+5. Reescribe matriz_visual de la maquina activa desde el ultimo record de esa maquina, o matriz vacia.
+6. Reescribe visitas de la maquina activa desde records filtrados por machineId.
+7. Reescribe detalle_visita desde record.visitDetails.
 
 Importante:
-Actualmente la normalizacion reescribe visitas/detalles/matriz para la maquina activa.
-Esto simplifica consistencia mientras frontend sigue guardando appState completo.
+- Actualmente la normalizacion reescribe visitas/detalles/matriz para la maquina activa.
+- Esto simplifica consistencia mientras frontend sigue guardando appState completo.
+- Los records sin machineId se migran en frontend hacia activeMachineId al normalizar estado viejo.
+- Si no hay maquina activa, syncNormalizedState guarda maquinas/productos existentes pero no escribe matriz/visitas.
+
+ESTADO CERO EN CONVEX
+
+El schema y syncNormalizedState soportan:
+- maquinas = 0
+- productos = 0
+- maquina_productos = 0
+- matriz_visual = 0
+- visitas = 0
+- detalle_visita = 0
+
+No se debe volver a introducir fallback obligatorio kc-01 en Convex.
 
 CONSULTA DE AUDITORIA
 
@@ -201,6 +226,10 @@ Conserva:
 - machines
 - activeMachineId
 
+Nota:
+El reset operativo de maquina desde la UI es diferente del script de pruebas.
+El reset UI limpia solo records/monthClosures/yearClosures de la maquina activa y conserva maquina, settings, productos asignados y catalogo.
+
 DESPLIEGUE CONVEX
 
 Para actualizar el deployment dev usado por la app:
@@ -208,3 +237,8 @@ Para actualizar el deployment dev usado por la app:
 
 No usar convex deploy sin revisar, porque por defecto intenta prod.
 
+CAMBIO DE SCHEMA
+
+El commit efcf934 modifica convex/schema.js agregando status, deletedAt y settings a maquinas.
+Antes de depender de esos campos en el deployment remoto, ejecutar contra el deployment usado por la app:
+- npx.cmd convex dev --once

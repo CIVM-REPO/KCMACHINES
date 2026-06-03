@@ -1,9 +1,9 @@
 KC MACHINE SELLS CONTROL - ESTADO ACTUAL
-Actualizado: 2026-06-02
+Actualizado: 2026-06-03
 
 RESUMEN
 
-La app es una SPA estatica para controlar una maquina vending: matriz visual, captura de visitas, stock, ventas, productos, informes y cierres.
+La app es una SPA estatica para controlar maquinas vending desde un mismo flujo operativo: matriz visual, captura de visitas, stock, ventas, productos, informes, cierres y configuracion por maquina.
 
 Archivos principales:
 - index.html
@@ -19,6 +19,7 @@ Rama/remoto:
 - Remoto: https://github.com/CIVM-REPO/KCMACHINES.git
 
 Commits recientes importantes:
+- efcf934 Prepare multi-machine settings model
 - c2e1234 Add migration reference report
 - 7830b68 Normalize Convex visit data
 - a13e549 Refactor visit accounting and reset test data
@@ -41,7 +42,7 @@ Existe un deployment prod detectado por Convex CLI:
 Importante:
 No asumir que prod es el entorno usado por la app. Antes de desplegar o limpiar datos, revisar convex-config.js y .env.local.
 
-ESTADO DE DATOS VERIFICADO DESPUES DEL RESET
+ESTADO DE DATOS VERIFICADO / COMPATIBILIDAD
 
 En Convex dev trustworthy-dinosaur-668:
 - maquinas: 1
@@ -58,6 +59,11 @@ La base quedo como primera carga real:
 - Sin visitas.
 - Sin cierres.
 
+Importante:
+- Ese estado es semilla/prueba existente, no una obligacion del modelo.
+- El frontend ya soporta estado cero: maquinas = 0, productos = 0, relaciones = 0, visitas = 0 y cierres = 0.
+- No se debe asumir que existe kc-01 ni que existe catalogo inicial.
+
 MODELO ACTUAL
 
 La app mantiene un modelo hibrido:
@@ -66,9 +72,36 @@ La app mantiene un modelo hibrido:
    Documento completo de compatibilidad. El frontend actual sigue leyendo/escribiendo este estado para mantener fluidez.
 
 2. Tablas normalizadas Convex
-   Se sincronizan desde appState en cada save. Preparan la base para reportes, auditoria y evolucion multi-maquina.
+   Se sincronizan desde appState en cada save. Preparan la base para reportes, auditoria y operacion multi-maquina.
 
 La fuente logica de contabilidad en la app es visitDetails.
+
+MODELO MULTI-MAQUINA ACTUAL
+
+appState contiene:
+- machines: lista de maquinas con id, name, status, deletedAt y settings.
+- activeMachineId: maquina operativa actual, o null si no hay maquina activa.
+- globalSettings: preferencias globales; hoy moneda, idioma futuro y preferencias visuales futuras.
+- machineProductIds: relacion catalogo global -> productos asignados por maquina.
+- records/monthClosures/yearClosures con machineId en registros nuevos.
+
+machine.settings contiene:
+- bankCommissionPercent
+- fuelReminderEveryVisits
+- monthlyFloorCost
+
+La comision bancaria, recordatorio de gasolina y derecho de piso mensual pertenecen a la maquina activa.
+La configuracion global no contiene datos operativos.
+
+ESTADO CERO
+
+Si no hay maquina activa, la pantalla principal muestra un panel para crear maquina.
+No se crea kc-01 automaticamente como fallback permanente.
+El flujo esperado desde cero es:
+1. Crear maquina.
+2. Crear productos en el catalogo.
+3. Asignar productos en espacios.
+4. Guardar primera carga historica.
 
 CLAVE DE ESTADO
 
@@ -90,6 +123,7 @@ ESTADO VISUAL INICIAL
 
 baseProductLayout esta vacio.
 Si no hay datos previos, los 50 espacios inician en EMPTY.
+Los selectores de espacios muestran solo productos asignados a la maquina activa.
 
 FECHAS GUARDADAS
 
@@ -103,3 +137,9 @@ Las imagenes de productos usan version estable:
 
 Se precargan una vez al cargar fecha para evitar recargas innecesarias en rerenders.
 
+CAMBIOS DE UI IMPORTANTES
+
+- El boton de la hamburguesa que antes decia KC Machines ahora actua como selector de maquina activa.
+- Existe vista de Configuracion con seccion Global y seccion Maquina actual.
+- El reset/limpieza de datos se movio a Configuracion de maquina actual con confirmacion por nombre.
+- Se elimino el boton Stock de prueba de la operacion diaria.
