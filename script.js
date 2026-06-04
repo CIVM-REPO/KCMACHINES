@@ -1986,7 +1986,9 @@ function accountingSummaryForRecords(records, overrides = {}) {
     : records.reduce((sum, record) => sum + Number(record.fuelCost || 0), 0);
   const floorFee = "floorFee" in overrides
     ? Number(overrides.floorFee || 0)
-    : Number(activeMachineSettings().monthlyFloorCost || 0);
+    : records.length
+      ? Number(activeMachineSettings().monthlyFloorCost || 0)
+      : 0;
   const cardSales = Number(overrides.cardSales || 0);
   const bankFee = cardSales * (commissionPercent / 100);
   const grossProfit = profitability - floorFee - fuelTotal - bankFee;
@@ -2572,14 +2574,18 @@ function renderAccounting() {
   const activeMonth = monthKey(visitDate.value);
   const activeYear = yearKey(visitDate.value);
   const records = monthRecords(visitDate.value);
-  const summary = accountingSummaryForRecords(records);
+  const activeMonthClosure = machineScoped(state.monthClosures).find((item) => item.month === activeMonth);
+  const summary = activeMonthClosure ? summaryFromClosure(activeMonthClosure) : accountingSummaryForRecords(records);
   const currentMonth = {
-    type: "current",
+    type: activeMonthClosure ? "closed" : "current",
     month: activeMonth,
     summary,
     records,
-    lastDate: [...records].sort((a, b) => b.date.localeCompare(a.date))[0]?.date || null,
-    closed: isMonthClosed(activeMonth)
+    lastDate: activeMonthClosure?.sourceDate || [...records].sort((a, b) => b.date.localeCompare(a.date))[0]?.date || null,
+    sourceDate: activeMonthClosure?.sourceDate,
+    closedAt: activeMonthClosure?.closedAt,
+    closure: activeMonthClosure,
+    closed: Boolean(activeMonthClosure) || isMonthClosed(activeMonth)
   };
   const closedMonths = [...machineScoped(state.monthClosures)]
     .sort((a, b) => b.month.localeCompare(a.month))
