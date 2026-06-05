@@ -36,15 +36,22 @@ Al cambiar de maquina:
 CREACION DE MAQUINA
 
 Crear desde cero:
-- Requiere nombre, filas y espacios por fila.
-- Crea machineProductIds vacio para la nueva maquina.
-- Crea rowSizes propio de la maquina.
-- No copia productos, settings, matriz, visitas, cierres ni stock de otra maquina.
+- Requiere nombre y una matriz visual valida.
+- El diseñador permite hasta 12 filas y hasta 12 espacios por fila.
+- Crea rowSizes propio de la maquina desde el diseñador.
+- Crea visualLayout vacio: todos los espacios inician EMPTY.
+- No copia settings, visitas, cierres, ventas ni stock de otra maquina.
 
-Heredar productos:
-- Requiere nombre, filas y espacios por fila.
-- Copia solo machineProductIds desde la maquina origen.
-- No copia settings, matriz, visitas, cierres ni stock.
+Heredar de otra maquina:
+- Requiere nombre y una maquina origen.
+- Copia rowSizes de la maquina origen.
+- Copia visualLayout desde la ultima visita de la maquina origen, o desde el layout guardado si aun no hay visita.
+- No copia settings, visitas, cierres, ventas, stock ni datos contables.
+
+Productos:
+- El catalogo de productos es global y compartido por todas las maquinas.
+- machineProductIds queda solo como compatibilidad legacy; la disponibilidad real sale de products.
+- Que un producto este o no en una maquina se define por su posicion visual en la matriz.
 
 REGLA LOCAL VS REMOTO
 
@@ -64,7 +71,7 @@ Hace:
 2. Precarga imagenes de productos.
 3. Lee record existente de la maquina activa si hay.
 4. Calcula stock anterior por producto usando registros/cierres de la maquina activa.
-5. Construye currentSlots desde buildDefaultSlots().
+5. Construye currentSlots desde buildDefaultSlots(), usando rowSizes y visualLayout de la maquina activa.
 6. Crea currentVisitDetails con createVisitDetailsForDate().
 7. Aplica detalles a slots.
 8. Calcula representantes.
@@ -221,15 +228,16 @@ Si se cierra diciembre:
 
 CATALOGO
 
-Cambios de productos:
+Cambios de catalogo global:
 - Si la maquina activa no tiene historial ni cierres, se aplican inmediatamente para facilitar estado cero.
 - Si ya hay historial/cierres, se programan para el siguiente mes mediante pendingProducts.
 
 Motivo:
 - Evitar cambiar columnas/precios dentro del mes actual.
 
-Al agregar un producto desde Productos, tambien se asigna a la maquina activa si existe.
-Los selectores visuales muestran activeProducts(), no todo products.
+Al agregar un producto desde Productos, se agrega al catalogo global compartido.
+Para usarlo en una maquina, se selecciona directamente en la posicion visual de la matriz.
+Los selectores visuales muestran activeProducts(), que actualmente devuelve todo products por ser catalogo global.
 
 CONFIGURACION
 

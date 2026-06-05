@@ -87,8 +87,8 @@ Campos:
 Uso:
 - Define orden contable estable.
 - Evita depender del orden visual.
-- Se sincroniza desde appState.machineProductIds para la maquina activa.
-- Si appState viejo no trae machineProductIds, se conserva compatibilidad asignando productos existentes a la maquina durante normalizacion.
+- Se sincroniza como catalogo global disponible para cada maquina.
+- appState.machineProductIds queda como compatibilidad legacy, no como fuente operativa principal.
 
 5. matriz_visual
 
@@ -103,7 +103,8 @@ Campos:
 - updatedAt
 
 Estado actual:
-- La cantidad de filas normalizadas depende de configuracionFilas/rowSizes de la maquina activa.
+- La cantidad de filas normalizadas depende de configuracionFilas/rowSizes de cada maquina.
+- idProducto sale de la ultima visita de esa maquina, o de machine.visualLayout si aun no hay historial.
 - La estructura historica por defecto genera 50 espacios.
 - idProducto null en arranque limpio.
 
@@ -170,8 +171,8 @@ Hace:
 1. Normaliza maquinas.
 2. Normaliza productos.
 3. Elimina de tablas normalizadas datos de maquinas que ya no existan en appState.
-4. Crea/actualiza maquina_productos de la maquina activa segun machineProductIds.
-5. Reescribe matriz_visual de la maquina activa desde el ultimo record de esa maquina, o matriz vacia.
+4. Crea/actualiza maquina_productos para cada maquina con el catalogo global.
+5. Reescribe matriz_visual de cada maquina desde su ultimo record, o desde visualLayout/matriz vacia si aun no tiene historial.
 6. Reescribe visitas de la maquina activa desde records filtrados por machineId.
 7. Reescribe detalle_visita desde record.visitDetails.
 
@@ -229,7 +230,7 @@ Conserva:
 
 Nota:
 El reset operativo de maquina desde la UI es diferente del script de pruebas.
-El reset UI limpia solo records/monthClosures/yearClosures de la maquina activa y conserva maquina, settings, productos asignados y catalogo.
+El reset UI limpia solo records/monthClosures/yearClosures de la maquina activa y conserva maquina, settings, layout visual y catalogo.
 
 DESPLIEGUE CONVEX
 

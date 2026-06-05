@@ -118,15 +118,25 @@ const machineCreateForm = document.getElementById("machineCreateForm");
 const newMachineNameInput = document.getElementById("newMachineNameInput");
 const inheritMachineSelect = document.getElementById("inheritMachineSelect");
 const machineLayoutFields = document.getElementById("machineLayoutFields");
+const addMatrixRowButton = document.getElementById("addMatrixRowButton");
+const machineMatrixPreview = document.getElementById("machineMatrixPreview");
+const matrixDesignerStatus = document.getElementById("matrixDesignerStatus");
 const newMachineRowsInput = document.getElementById("newMachineRowsInput");
 const newMachineSpacesInput = document.getElementById("newMachineSpacesInput");
 const machineAdminList = document.getElementById("machineAdminList");
+const machineSettingsAccess = document.getElementById("machineSettingsAccess");
+const globalSettingsAccess = document.getElementById("globalSettingsAccess");
+const machineSettingsPanel = document.getElementById("machineSettingsPanel");
+const globalSettingsPanel = document.getElementById("globalSettingsPanel");
 const machineSettingsEmpty = document.getElementById("machineSettingsEmpty");
 const machineSettingsForm = document.getElementById("machineSettingsForm");
 const machineNameInput = document.getElementById("machineNameInput");
 const bankCommissionInput = document.getElementById("bankCommissionInput");
 const fuelReminderEveryInput = document.getElementById("fuelReminderEveryInput");
 const monthlyFloorCostInput = document.getElementById("monthlyFloorCostInput");
+const machineProductAssignSelect = document.getElementById("machineProductAssignSelect");
+const assignMachineProductButton = document.getElementById("assignMachineProductButton");
+const machineProductsList = document.getElementById("machineProductsList");
 const saveSettingsButton = document.getElementById("saveSettingsButton");
 const exportMachineButton = document.getElementById("exportMachineButton");
 const importMachineButton = document.getElementById("importMachineButton");
@@ -134,6 +144,8 @@ const resetMachineButton = document.getElementById("resetMachineButton");
 let showAllHistory = false;
 let activeMonthCard = null;
 let expandedSalesCard = null;
+let settingsScope = "machine";
+let createMachineRowSizes = defaultRowSizes.slice();
 
 function loadState() {
   try {
@@ -296,13 +308,15 @@ function machineConfigRows(machine = activeMachine()) {
 function normalizeMachine(machine, index = 0) {
   const id = String(machine?.id || machine?.idMaquina || "").trim() || uniqueId("machine");
   const name = String(machine?.name || machine?.nombreMaquina || `Maquina ${index + 1}`).trim() || `Maquina ${index + 1}`;
+  const rowSizes = machineRowSizes(machine);
   return {
     id,
     name,
     status: machine?.status || (machine?.active === false ? "inactive" : "active"),
     deletedAt: machine?.deletedAt || null,
     settings: normalizeMachineSettings(machine?.settings || machine?.configuracion || {}),
-    rowSizes: machineRowSizes(machine)
+    rowSizes,
+    visualLayout: normalizeVisualLayout(machine?.visualLayout || machine?.layoutVisual, rowSizes)
   };
 }
 
@@ -335,6 +349,26 @@ function normalizeMachineProductIds(savedIds, machines, normalizedProducts) {
   });
 
   return byMachine;
+}
+
+function normalizeVisualLayout(layout, rowSizes = defaultRowSizes) {
+  const validCodes = new Set(rowSizes.flatMap((size, rowIndex) => Array.from({ length: size }, (_, index) => (
+    `${rowLetters[rowIndex]}${String(index + 1).padStart(2, "0")}`
+  ))));
+  const entries = Array.isArray(layout)
+    ? layout
+    : layout && typeof layout === "object"
+      ? Object.entries(layout).map(([code, product]) => ({ code, product }))
+      : [];
+  const normalized = {};
+
+  entries.forEach((entry) => {
+    const code = String(entry?.code || entry?.coordenada || "").trim().toUpperCase();
+    const product = normalizeProductName(entry?.product || entry?.idProducto || entry?.nombreProducto);
+    if (validCodes.has(code)) normalized[code] = product && product !== EMPTY_PRODUCT ? product : EMPTY_PRODUCT;
+  });
+
+  return normalized;
 }
 
 function normalizeState(savedState) {
@@ -392,23 +426,19 @@ function activeMachineName() {
 }
 
 function activeMachineProductNames() {
-  const machine = activeMachine();
-  if (!machine) return [];
-  return Array.isArray(state.machineProductIds?.[machine.id]) ? state.machineProductIds[machine.id] : [];
+  return products.map((product) => product.name);
 }
 
 function activeProducts() {
-  const assigned = new Set(activeMachineProductNames());
-  return products.filter((product) => assigned.has(product.name));
+  return products;
 }
 
 function ensureProductAssignedToActiveMachine(productName) {
+  if (!productName) return;
+  if (!products.some((product) => product.name === productName)) return;
   const machine = activeMachine();
-  if (!machine || !productName) return;
-  if (!state.machineProductIds[machine.id]) state.machineProductIds[machine.id] = [];
-  if (!state.machineProductIds[machine.id].includes(productName)) {
-    state.machineProductIds[machine.id].push(productName);
-  }
+  if (!machine) return;
+  state.machineProductIds[machine.id] = activeMachineProductNames();
 }
 
 function updateMachineChrome() {
@@ -1090,6 +1120,12 @@ function productForSlot(code) {
   return baseProductLayout[code] || EMPTY_PRODUCT;
 }
 
+function productForMachineSlot(machine, code) {
+  const savedProduct = normalizeProductName(machine?.visualLayout?.[code]);
+  if (savedProduct) return savedProduct === EMPTY_PRODUCT ? EMPTY_PRODUCT : savedProduct;
+  return productForSlot(code);
+}
+
 function isEmptyProduct(productName) {
   return productName === EMPTY_PRODUCT;
 }
@@ -1271,11 +1307,12 @@ function previousProductCost(slot) {
 
 function buildDefaultSlots() {
   const slots = [];
+  const machine = activeMachine();
 
-  machineRowSizes().forEach((size, rowIndex) => {
+  machineRowSizes(machine).forEach((size, rowIndex) => {
     for (let itemIndex = 0; itemIndex < size; itemIndex += 1) {
       const code = `${rowLetters[rowIndex]}${String(itemIndex + 1).padStart(2, "0")}`;
-      const baseProductName = productForSlot(code);
+      const baseProductName = productForMachineSlot(machine, code);
       const productName = isEmptyProduct(baseProductName) || productCatalogItem(baseProductName) ? baseProductName : EMPTY_PRODUCT;
       slots.push({
         code,
@@ -1761,6 +1798,18 @@ function buildMachine() {
   });
 }
 
+function refreshMachineSlotValues() {
+  machineTarget.querySelectorAll(".slot").forEach((slotElement) => {
+    const slotData = findSlot(slotElement.dataset.code);
+    if (!slotData) return;
+    slotElement.classList.toggle("stock-error", hasStockMismatch(slotData));
+    const foundValue = slotElement.querySelector(".slot-value.found strong");
+    const leftValue = slotElement.querySelector(".slot-value.left strong");
+    if (foundValue) foundValue.textContent = String(slotData.found);
+    if (leftValue) leftValue.textContent = String(slotData.left);
+  });
+}
+
 function updateSlotProduct(code, productName) {
   const slot = findSlot(code);
   if (!slot || isDateLocked(visitDate.value)) return false;
@@ -1792,6 +1841,7 @@ function updateSlotProduct(code, productName) {
   applyVisitDetailsToSlots();
   syncVisitDetailsFromVisual();
   ensureCaptureSlots();
+  syncActiveMachineVisualLayout();
   buildMachine();
   updateSummary();
   return true;
@@ -2102,12 +2152,13 @@ function switchActiveMachine(machineId) {
 }
 
 function renderSettings() {
+  applySettingsScope();
   currencyInput.value = state.globalSettings.currency || "USD";
   languageInput.value = state.globalSettings.language || "";
   visualPreferencesInput.value = "";
   inheritMachineSelect.innerHTML = `
     <option value="">Iniciar desde cero</option>
-    ${state.machines.map((machine) => `<option value="${machine.id}">Heredar productos de ${escapeHtml(machine.name)}</option>`).join("")}
+    ${state.machines.map((machine) => `<option value="${machine.id}">Heredar matriz de ${escapeHtml(machine.name)}</option>`).join("")}
   `;
   updateCreateMachineLayoutFields();
 
@@ -2121,17 +2172,21 @@ function renderSettings() {
     monthlyFloorCostInput.value = Number(machine.settings.monthlyFloorCost || 0);
   }
 
-  machineAdminList.innerHTML = state.machines.length ? state.machines.map((item) => `
-    <article class="machine-admin-row">
-      <div>
-        <strong>${escapeHtml(item.name)}</strong>
-        <span>${item.status === "inactive" ? "Inactiva" : "Activa"} · ${state.machineProductIds[item.id]?.length || 0} productos</span>
-      </div>
-      <button type="button" data-admin-switch="${item.id}"${item.id === state.activeMachineId ? " disabled" : ""}>Usar</button>
-      <button type="button" data-admin-toggle="${item.id}">${item.status === "inactive" ? "Restaurar" : "Inactivar"}</button>
-      <button class="clear-data-button" type="button" data-admin-delete="${item.id}">Eliminar</button>
-    </article>
-  `).join("") : `<div class="products-empty">No hay maquinas.</div>`;
+  machineAdminList.innerHTML = state.machines.length ? state.machines.map((item) => {
+    const sizes = machineRowSizes(item);
+    const spaces = sizes.reduce((sum, size) => sum + size, 0);
+    return `
+      <article class="machine-admin-row">
+        <div>
+          <strong>${escapeHtml(item.name)}</strong>
+          <span>${item.status === "inactive" ? "Inactiva" : "Activa"} - ${sizes.length} filas, ${spaces} espacios</span>
+        </div>
+        <button type="button" data-admin-switch="${item.id}"${item.id === state.activeMachineId ? " disabled" : ""}>Usar</button>
+        <button type="button" data-admin-toggle="${item.id}">${item.status === "inactive" ? "Restaurar" : "Inactivar"}</button>
+        <button class="clear-data-button" type="button" data-admin-delete="${item.id}">Eliminar</button>
+      </article>
+    `;
+  }).join("") : `<div class="products-empty">No hay maquinas.</div>`;
 
   machineAdminList.querySelectorAll("[data-admin-switch]").forEach((button) => {
     button.addEventListener("click", () => switchActiveMachine(button.dataset.adminSwitch));
@@ -2142,12 +2197,161 @@ function renderSettings() {
   machineAdminList.querySelectorAll("[data-admin-delete]").forEach((button) => {
     button.addEventListener("click", () => deleteMachinePermanently(button.dataset.adminDelete));
   });
+  renderMachineProductsManager();
+}
+
+function setSettingsScope(scope) {
+  settingsScope = scope === "global" ? "global" : "machine";
+  applySettingsScope();
+}
+
+function applySettingsScope() {
+  const machineSelected = settingsScope === "machine";
+  settingsView.dataset.settingsScope = settingsScope;
+  machineSettingsPanel.hidden = !machineSelected;
+  globalSettingsPanel.hidden = machineSelected;
+  machineSettingsAccess.setAttribute("aria-selected", String(machineSelected));
+  globalSettingsAccess.setAttribute("aria-selected", String(!machineSelected));
+}
+
+function machineHasHistory(machineId) {
+  return state.records.some((record) => record.machineId === machineId)
+    || state.monthClosures.some((closure) => closure.machineId === machineId)
+    || state.yearClosures.some((closure) => closure.machineId === machineId);
+}
+
+function renderMachineProductsManager() {
+  const machine = activeMachine();
+  if (!machine) {
+    machineProductAssignSelect.innerHTML = `<option value="">Sin maquina activa</option>`;
+    machineProductAssignSelect.disabled = true;
+    assignMachineProductButton.disabled = true;
+    machineProductsList.innerHTML = `<div class="products-empty">No hay maquina activa.</div>`;
+    return;
+  }
+
+  machineProductAssignSelect.disabled = true;
+  assignMachineProductButton.disabled = true;
+  machineProductAssignSelect.innerHTML = `<option value="">Catalogo global compartido</option>`;
+  machineProductsList.innerHTML = `<div class="products-empty">Los productos son globales. El uso por maquina se define en la matriz visual.</div>`;
 }
 
 function updateCreateMachineLayoutFields() {
-  if (!newMachineRowsInput.value) newMachineRowsInput.value = defaultRowSizes.length;
-  if (!newMachineSpacesInput.value) newMachineSpacesInput.value = Math.max(...defaultRowSizes);
-  machineLayoutFields.classList.toggle("is-inherited", Boolean(inheritMachineSelect.value));
+  const sourceMachine = state.machines.find((machine) => machine.id === inheritMachineSelect.value);
+  const wasInherited = machineLayoutFields.classList.contains("is-inherited");
+  if (sourceMachine) {
+    createMachineRowSizes = machineRowSizes(sourceMachine);
+  } else if (wasInherited) {
+    createMachineRowSizes = defaultRowSizes.slice();
+  } else if (!Array.isArray(createMachineRowSizes) || !createMachineRowSizes.length) {
+    createMachineRowSizes = defaultRowSizes.slice();
+  }
+
+  newMachineRowsInput.value = createMachineRowSizes.length;
+  newMachineSpacesInput.value = createMachineRowSizes[0] || "";
+  machineLayoutFields.classList.toggle("is-inherited", Boolean(sourceMachine));
+  addMatrixRowButton.disabled = Boolean(sourceMachine) || createMachineRowSizes.length >= 12;
+  renderCreateMachineMatrixDesigner(sourceMachine);
+}
+
+function renderCreateMachineMatrixDesigner(sourceMachine = null) {
+  const inheritedLayout = sourceMachine ? latestVisualLayoutForMachine(sourceMachine.id) : {};
+  const inherited = Boolean(sourceMachine);
+  const totalSpaces = createMachineRowSizes.reduce((sum, size) => sum + size, 0);
+
+  machineMatrixPreview.innerHTML = createMachineRowSizes.length
+    ? createMachineRowSizes.map((size, rowIndex) => {
+      const rowCode = rowLetters[rowIndex];
+      const cells = Array.from({ length: size }, (_, index) => {
+        const code = `${rowCode}${String(index + 1).padStart(2, "0")}`;
+        const product = inheritedLayout[code] || EMPTY_PRODUCT;
+        return `<span class="matrix-cell${!isEmptyProduct(product) ? " filled" : ""}" title="${code}${!isEmptyProduct(product) ? ` - ${escapeHtml(product)}` : ""}"></span>`;
+      }).join("");
+      return `
+        <div class="matrix-designer-row">
+          <span class="matrix-row-label">Fila ${rowCode}</span>
+          <div class="matrix-cells" style="--matrix-columns: ${size}">${cells}</div>
+          <div class="matrix-row-actions">
+            <button type="button" data-matrix-add-space="${rowIndex}" aria-label="Agregar espacio a fila ${rowCode}"${inherited || size >= 12 ? " disabled" : ""}>+</button>
+            <button type="button" data-matrix-remove-space="${rowIndex}" aria-label="Quitar espacio de fila ${rowCode}"${inherited || size <= 1 ? " disabled" : ""}>-</button>
+            <button type="button" data-matrix-remove-row="${rowIndex}" aria-label="Eliminar fila ${rowCode}"${inherited || createMachineRowSizes.length <= 1 ? " disabled" : ""}>x</button>
+          </div>
+        </div>
+      `;
+    }).join("")
+    : `<div class="products-empty">Agrega al menos una fila.</div>`;
+
+  matrixDesignerStatus.textContent = inherited
+    ? `Se heredaran ${createMachineRowSizes.length} filas, ${totalSpaces} espacios y posiciones visuales.`
+    : `${createMachineRowSizes.length} filas, ${totalSpaces} espacios. Maximo 12 filas y 12 espacios por fila.`;
+
+  machineMatrixPreview.querySelectorAll("[data-matrix-add-space]").forEach((button) => {
+    button.addEventListener("click", () => addSpaceToCreateMachineRow(Number(button.dataset.matrixAddSpace)));
+  });
+  machineMatrixPreview.querySelectorAll("[data-matrix-remove-space]").forEach((button) => {
+    button.addEventListener("click", () => removeSpaceFromCreateMachineRow(Number(button.dataset.matrixRemoveSpace)));
+  });
+  machineMatrixPreview.querySelectorAll("[data-matrix-remove-row]").forEach((button) => {
+    button.addEventListener("click", () => removeCreateMachineRow(Number(button.dataset.matrixRemoveRow)));
+  });
+}
+
+function addCreateMachineRow() {
+  if (inheritMachineSelect.value || createMachineRowSizes.length >= 12) return;
+  createMachineRowSizes.push(1);
+  updateCreateMachineLayoutFields();
+}
+
+function addSpaceToCreateMachineRow(rowIndex) {
+  if (inheritMachineSelect.value || createMachineRowSizes[rowIndex] >= 12) return;
+  createMachineRowSizes[rowIndex] += 1;
+  updateCreateMachineLayoutFields();
+}
+
+function removeSpaceFromCreateMachineRow(rowIndex) {
+  if (inheritMachineSelect.value || createMachineRowSizes[rowIndex] <= 1) return;
+  createMachineRowSizes[rowIndex] -= 1;
+  updateCreateMachineLayoutFields();
+}
+
+function removeCreateMachineRow(rowIndex) {
+  if (inheritMachineSelect.value || createMachineRowSizes.length <= 1) return;
+  createMachineRowSizes.splice(rowIndex, 1);
+  updateCreateMachineLayoutFields();
+}
+
+function selectedCreateMachineRowSizes() {
+  const sourceMachine = state.machines.find((machine) => machine.id === inheritMachineSelect.value);
+  return sourceMachine ? machineRowSizes(sourceMachine) : normalizeRowSizes(createMachineRowSizes);
+}
+
+function assignProductToActiveMachine() {
+  const productName = machineProductAssignSelect.value;
+  const machine = activeMachine();
+  if (!machine || !productName) return;
+  ensureProductAssignedToActiveMachine(productName);
+  saveState();
+  renderSettings();
+  loadDate(visitDate.value);
+  showToast("Producto asignado a esta maquina");
+}
+
+function removeProductFromActiveMachine(productName) {
+  const machine = activeMachine();
+  if (!machine || !productName) return;
+  if (machineHasHistory(machine.id)) {
+    showToast("No se quita con historial; deja el producto sin usar en la matriz");
+    return;
+  }
+  state.machineProductIds[machine.id] = activeMachineProductNames().filter((name) => name !== productName);
+  currentSlots.forEach((slot) => {
+    if (slot.product === productName) resetSlotToEmpty(slot);
+    if (slot.previousProduct === productName) slot.previousProduct = EMPTY_PRODUCT;
+  });
+  saveState();
+  renderSettings();
+  loadDate(visitDate.value);
+  showToast("Producto quitado de esta maquina");
 }
 
 function createMachine(name, options = {}) {
@@ -2157,19 +2361,22 @@ function createMachine(name, options = {}) {
     return null;
   }
   const sourceMachineId = options.sourceMachineId || "";
-  const rowSizes = normalizeRowSizes(options.rowSizes);
+  const sourceMachine = state.machines.find((machine) => machine.id === sourceMachineId);
+  const rowSizes = sourceMachine ? machineRowSizes(sourceMachine) : normalizeRowSizes(options.rowSizes);
+  const visualLayout = sourceMachine
+    ? normalizeVisualLayout(latestVisualLayoutForMachine(sourceMachine.id), rowSizes)
+    : {};
 
   const machine = normalizeMachine({
     id: uniqueId("machine"),
     name: cleanName,
     status: "active",
     settings: { ...defaultMachineSettings },
-    rowSizes
+    rowSizes,
+    visualLayout
   }, state.machines.length);
   state.machines.push(machine);
-  state.machineProductIds[machine.id] = sourceMachineId && state.machineProductIds[sourceMachineId]
-    ? state.machineProductIds[sourceMachineId].slice()
-    : [];
+  state.machineProductIds[machine.id] = products.map((product) => product.name);
   state.activeMachineId = machine.id;
   saveState();
   updateMachineChrome();
@@ -2181,16 +2388,16 @@ function createMachine(name, options = {}) {
 function handleCreateMachine(event) {
   event.preventDefault();
   const sourceMachineId = inheritMachineSelect.value;
-  const rowSizes = buildUniformRowSizes(newMachineRowsInput.value, newMachineSpacesInput.value);
-  if (!rowSizes) {
-    showToast("Define filas y espacios por fila entre 1 y 12");
+  const rowSizes = selectedCreateMachineRowSizes();
+  if (!rowSizes.length || rowSizes.some((size) => size < 1 || size > 12) || rowSizes.length > 12) {
+    showToast("Define una matriz entre 1 y 12 filas, con 1 a 12 espacios por fila");
     return;
   }
   const machine = createMachine(newMachineNameInput.value, { sourceMachineId, rowSizes });
   if (!machine) return;
   machineCreateForm.reset();
-  newMachineRowsInput.value = defaultRowSizes.length;
-  newMachineSpacesInput.value = Math.max(...defaultRowSizes);
+  createMachineRowSizes = defaultRowSizes.slice();
+  updateCreateMachineLayoutFields();
   showToast("Maquina creada");
 }
 
@@ -2277,7 +2484,7 @@ function exportActiveMachine() {
   const payload = {
     globalSettings: { currency: state.globalSettings.currency },
     machine,
-    products: products.filter((product) => activeMachineProductNames().includes(product.name)),
+    products,
     machineProductIds: activeMachineProductNames(),
     records: machineScoped(state.records),
     monthClosures: machineScoped(state.monthClosures),
@@ -2299,6 +2506,7 @@ function importActiveMachine() {
     const layoutMachine = backupMachine.rowSizes || backupMachine.configuracionFilas ? backupMachine : machine;
     machine.settings = normalizeMachineSettings(backupMachine.settings || machine.settings);
     machine.rowSizes = machineRowSizes(layoutMachine);
+    machine.visualLayout = normalizeVisualLayout(backupMachine.visualLayout || backupMachine.layoutVisual || machine.visualLayout, machine.rowSizes);
     machine.name = String(backupMachine.name || machine.name).trim() || machine.name;
     if (payload.globalSettings?.currency) {
       state.globalSettings.currency = String(payload.globalSettings.currency).trim().toUpperCase();
@@ -2309,9 +2517,7 @@ function importActiveMachine() {
       state.products = [...merged.values()];
       syncProductCatalog();
     }
-    state.machineProductIds[machine.id] = Array.isArray(payload.machineProductIds)
-      ? payload.machineProductIds.map(normalizeProductName).filter(Boolean)
-      : (payload.products || []).map((product) => normalizeProductName(product.name || product.nombreProducto)).filter(Boolean);
+    state.machineProductIds[machine.id] = products.map((product) => product.name);
     state.records = [
       ...state.records.filter((record) => record.machineId !== machine.id),
       ...(payload.records || []).map((record) => ({ ...record, machineId: machine.id }))
@@ -2451,6 +2657,11 @@ function saveProductEdit(index) {
   Object.keys(state.machineProductIds || {}).forEach((machineId) => {
     state.machineProductIds[machineId] = (state.machineProductIds[machineId] || []).map((name) => name === oldName ? nextName : name);
   });
+  state.machines.forEach((machine) => {
+    Object.keys(machine.visualLayout || {}).forEach((code) => {
+      if (machine.visualLayout[code] === oldName) machine.visualLayout[code] = nextName;
+    });
+  });
   scheduleCatalogChange(draftProducts, "Producto actualizado", { rebuildMachine: oldName !== nextName });
 }
 
@@ -2476,6 +2687,11 @@ function deleteProduct(index) {
   Object.keys(state.machineProductIds || {}).forEach((machineId) => {
     state.machineProductIds[machineId] = (state.machineProductIds[machineId] || []).filter((name) => name !== product.name);
   });
+  state.machines.forEach((machine) => {
+    Object.keys(machine.visualLayout || {}).forEach((code) => {
+      if (machine.visualLayout[code] === product.name) machine.visualLayout[code] = EMPTY_PRODUCT;
+    });
+  });
   scheduleCatalogChange(draftProducts, "Producto eliminado");
 }
 
@@ -2497,9 +2713,8 @@ function addProduct(event) {
     cost: Number(productCostInput.value || 0),
     price: Number(productPriceInput.value || 0)
   });
-  ensureProductAssignedToActiveMachine(name);
   productForm.reset();
-  scheduleCatalogChange(draftProducts, "Producto agregado al final");
+  scheduleCatalogChange(draftProducts, "Producto agregado al catalogo");
 }
 
 function summaryFromClosure(closure) {
@@ -3121,7 +3336,7 @@ function saveSlotInputs() {
   }
   applyVisitDetailsToSlots();
   ensureCaptureSlots();
-  buildMachine();
+  refreshMachineSlotValues();
   updateSummary();
   slotDialog.close();
 }
@@ -3137,6 +3352,31 @@ function handleSlotInputKeydown(event) {
   }
 
   saveSlotInputs();
+}
+
+function visualLayoutFromSlots(slots = []) {
+  return (slots || []).reduce((layout, slot) => {
+    if (!slot?.code) return layout;
+    layout[slot.code] = isEmptyProduct(slot.product) ? EMPTY_PRODUCT : slot.product;
+    return layout;
+  }, {});
+}
+
+function latestVisualLayoutForMachine(machineId) {
+  const machine = state.machines.find((item) => item.id === machineId);
+  if (machineId === state.activeMachineId && currentSlots.length) return visualLayoutFromSlots(currentSlots);
+  const latest = [...state.records]
+    .filter((record) => record.machineId === machineId)
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0];
+  const slots = latest?.slotsSnapshot || latest?.slots;
+  if (Array.isArray(slots) && slots.length) return visualLayoutFromSlots(slots);
+  return normalizeVisualLayout(machine?.visualLayout, machineRowSizes(machine));
+}
+
+function syncActiveMachineVisualLayout() {
+  const machine = activeMachine();
+  if (!machine) return;
+  machine.visualLayout = normalizeVisualLayout(visualLayoutFromSlots(currentSlots), machineRowSizes(machine));
 }
 
 function currentRecord() {
@@ -3234,6 +3474,7 @@ function saveSelectedDate() {
     return;
   }
 
+  syncActiveMachineVisualLayout();
   state.records = chainResult.records;
   saveState();
   loadDate(record.date);
@@ -3279,6 +3520,10 @@ settingsViewButton.addEventListener("click", showSettingsView);
 zeroCreateMachine.addEventListener("click", showSettingsView);
 machineCreateForm.addEventListener("submit", handleCreateMachine);
 inheritMachineSelect.addEventListener("change", updateCreateMachineLayoutFields);
+addMatrixRowButton.addEventListener("click", addCreateMachineRow);
+machineSettingsAccess.addEventListener("click", () => setSettingsScope("machine"));
+globalSettingsAccess.addEventListener("click", () => setSettingsScope("global"));
+assignMachineProductButton.addEventListener("click", assignProductToActiveMachine);
 saveSettingsButton.addEventListener("click", saveSettings);
 resetMachineButton.addEventListener("click", resetActiveMachineData);
 exportMachineButton.addEventListener("click", exportActiveMachine);

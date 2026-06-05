@@ -82,7 +82,7 @@ appState contiene:
 - machines: lista de maquinas con id, name, status, deletedAt y settings.
 - activeMachineId: maquina operativa actual, o null si no hay maquina activa.
 - globalSettings: preferencias globales; hoy moneda, idioma futuro y preferencias visuales futuras.
-- machineProductIds: relacion catalogo global -> productos asignados por maquina.
+- machineProductIds: compatibilidad legacy; el catalogo operativo es global en products.
 - records/monthClosures/yearClosures con machineId en registros nuevos.
 
 machine.settings contiene:
@@ -123,7 +123,7 @@ ESTADO VISUAL INICIAL
 
 baseProductLayout esta vacio.
 Si no hay datos previos, los 50 espacios inician en EMPTY.
-Los selectores de espacios muestran solo productos asignados a la maquina activa.
+Los selectores de espacios muestran el catalogo global de productos.
 
 FECHAS GUARDADAS
 

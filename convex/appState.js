@@ -57,17 +57,33 @@ function machineList(appState) {
         fuelReminderEveryVisits: Number(machine.settings?.fuelReminderEveryVisits ?? 4),
         monthlyFloorCost: Number(machine.settings?.monthlyFloorCost ?? 0)
       },
-      rowSizes: machineRowSizes(machine)
+      rowSizes: machineRowSizes(machine),
+      visualLayout: normalizeVisualLayout(machine?.visualLayout || machine?.layoutVisual, machineRowSizes(machine))
     }));
 }
 
 function machineProductIds(appState, idMaquina, products) {
-  const saved = appState?.machineProductIds;
-  const hasMap = saved && typeof saved === "object" && !Array.isArray(saved);
-  if (!hasMap) return products.map((product) => product.idProducto);
-  return Array.isArray(saved[idMaquina])
-    ? saved[idMaquina].map(productId).filter(Boolean)
-    : [];
+  return products.map((product) => product.idProducto);
+}
+
+function normalizeVisualLayout(layout, rowSizes = defaultRowSizes) {
+  const validCodes = new Set(rowSizes.flatMap((size, rowIndex) => Array.from({ length: size }, (_, index) => (
+    `${rowLetters[rowIndex]}${String(index + 1).padStart(2, "0")}`
+  ))));
+  const entries = Array.isArray(layout)
+    ? layout
+    : layout && typeof layout === "object"
+      ? Object.entries(layout).map(([code, product]) => ({ code, product }))
+      : [];
+  const normalized = {};
+
+  entries.forEach((entry) => {
+    const code = String(entry?.code || entry?.coordenada || "").trim().toUpperCase();
+    const idProducto = productId(entry?.product || entry?.idProducto || entry?.nombreProducto);
+    if (validCodes.has(code)) normalized[code] = idProducto && idProducto !== EMPTY_PRODUCT ? idProducto : null;
+  });
+
+  return normalized;
 }
 
 function machineConfigRows(machine) {
@@ -105,7 +121,7 @@ function visualMatrixFromState(appState, machine) {
 
   return defaultVisualMatrix(machine).map((cell) => {
     const slot = byCode.get(cell.coordenada);
-    const idProducto = productId(slot?.product);
+    const idProducto = productId(slot?.product) || machine.visualLayout[cell.coordenada] || null;
     return {
       ...cell,
       idProducto: idProducto && idProducto !== EMPTY_PRODUCT ? idProducto : null
@@ -249,36 +265,35 @@ async function syncNormalizedState(ctx, appState) {
     }
   )));
 
-  if (!activeMachineId) return;
+  await Promise.all(machines.map(async (machine) => {
+    const machineProducts = machineProductIds(appState, machine.idMaquina, products)
+      .map((idProducto) => productsById.get(idProducto))
+      .filter(Boolean);
 
-  const activeMachineProducts = machineProductIds(appState, activeMachineId, products)
-    .map((idProducto) => productsById.get(idProducto))
-    .filter(Boolean);
+    await deleteByMachine(ctx, "maquina_productos", machine.idMaquina);
+    await Promise.all(machineProducts.map((product, index) => upsertByIndex(
+      ctx,
+      "maquina_productos",
+      "by_maquina_producto",
+      (q) => q.eq("idMaquina", machine.idMaquina).eq("idProducto", product.idProducto),
+      {
+        idMaquina: machine.idMaquina,
+        idProducto: product.idProducto,
+        ordenContable: index,
+        activoEnMaquina: true,
+        createdAt: now,
+        updatedAt: now
+      }
+    )));
 
-  await deleteByMachine(ctx, "maquina_productos", activeMachineId);
-  await Promise.all(activeMachineProducts.map((product, index) => upsertByIndex(
-    ctx,
-    "maquina_productos",
-    "by_maquina_producto",
-    (q) => q.eq("idMaquina", activeMachineId).eq("idProducto", product.idProducto),
-    {
-      idMaquina: activeMachineId,
-      idProducto: product.idProducto,
-      ordenContable: index,
-      activoEnMaquina: true,
-      createdAt: now,
+    await deleteByMachine(ctx, "matriz_visual", machine.idMaquina);
+    await Promise.all(visualMatrixFromState(appState, machine).map((cell) => ctx.db.insert("matriz_visual", {
+      ...cell,
       updatedAt: now
-    }
-  )));
+    })));
+  }));
 
-  await deleteByMachine(ctx, "matriz_visual", activeMachineId);
-  const activeMachine = machines.find((machine) => machine.idMaquina === activeMachineId);
-  if (!activeMachine) return;
-
-  await Promise.all(visualMatrixFromState(appState, activeMachine).map((cell) => ctx.db.insert("matriz_visual", {
-    ...cell,
-    updatedAt: now
-  })));
+  if (!activeMachineId) return;
 
   await deleteByMachine(ctx, "detalle_visita", activeMachineId);
   await deleteByMachine(ctx, "visitas", activeMachineId);

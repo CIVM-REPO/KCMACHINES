@@ -66,8 +66,8 @@ Objetivo:
 Verificar que primer guardado no genera ventas.
 
 Pasos:
-1. Abrir app con una maquina activa y productos asignados.
-2. Asignar productos a algunos espacios.
+1. Abrir app con una maquina activa y catalogo de productos.
+2. Seleccionar productos en algunos espacios de la matriz.
 3. Abrir representante de cada producto.
 4. Dejar SM = 0.
 5. Dejar NS > 0.
@@ -220,32 +220,32 @@ Pasos:
 2. Abrir app.
 3. Confirmar que no se crea kc-01.
 4. Ir a Configuracion.
-5. Crear primera maquina desde cero definiendo filas y espacios por fila.
+5. Crear primera maquina desde cero con el diseñador visual de matriz.
 
 Esperado:
 - activeMachineId queda con el id de la nueva maquina.
-- machineProductIds de esa maquina inicia vacio.
-- rowSizes queda guardado con la estructura ingresada.
+- machineProductIds queda como compatibilidad legacy.
+- rowSizes queda guardado con la estructura diseñada.
+- visualLayout inicia vacio/EMPTY.
 - No hay records ni cierres.
 - La pantalla principal se habilita para esa maquina.
 
-PRUEBA 10 - CREAR MAQUINA HEREDANDO PRODUCTOS
+PRUEBA 10 - CREAR MAQUINA HEREDANDO MATRIZ
 
 Objetivo:
-Verificar que heredar productos no copia historial.
+Verificar que heredar matriz no copia historial ni stock.
 
 Pasos:
 1. Tener una maquina origen con productos y visitas.
-2. Crear nueva maquina heredando productos de la origen.
+2. Crear nueva maquina heredando matriz de la origen.
 3. Cambiar a la nueva maquina.
 
 Esperado:
-- La nueva maquina tiene relacion de productos.
-- La nueva maquina usa las filas y espacios ingresados en el formulario.
+- La nueva maquina copia rowSizes de la origen.
+- La nueva maquina copia posiciones visuales de productos.
 - No tiene records.
 - No tiene cierres.
 - No tiene stock historico.
-- Matriz inicia limpia.
 
 PRUEBA 11 - CAMBIO DE MAQUINA
 
@@ -283,10 +283,10 @@ Esperado:
 PRUEBA 13 - RESET DE MAQUINA
 
 Objetivo:
-Verificar que reset limpia historial sin borrar productos asignados.
+Verificar que reset limpia historial sin borrar catalogo ni layout de maquina.
 
 Pasos:
-1. Tener maquina con productos asignados, visitas y cierres.
+1. Tener maquina con productos en matriz, visitas y cierres.
 2. Ir a Configuracion.
 3. Reset de maquina.
 4. Escribir exactamente el nombre de la maquina.
@@ -294,7 +294,7 @@ Pasos:
 Esperado:
 - records/monthClosures/yearClosures de esa maquina quedan vacios.
 - La maquina y sus settings se conservan.
-- Los productos asignados se conservan.
+- El layout visual de la maquina se conserva.
 - El catalogo global se conserva.
 
 PRUEBA 14 - INACTIVAR Y ELIMINAR

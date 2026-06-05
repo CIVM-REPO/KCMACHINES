@@ -1025,11 +1025,37 @@ h2 {
   display: none;
 }
 
+.settings-access-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0 18px;
+}
+
+.settings-access-switch button {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.settings-access-switch button[aria-selected="true"] {
+  border-color: rgba(53, 231, 154, 0.42);
+  background: rgba(53, 231, 154, 0.12);
+  color: var(--text);
+}
+
 .settings-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 16px;
   padding: 18px;
+}
+
+.settings-view[data-settings-scope] .settings-grid {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .settings-panel {
@@ -1040,6 +1066,10 @@ h2 {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.025);
+}
+
+.settings-panel[hidden] {
+  display: none;
 }
 
 .settings-subsection {
@@ -1059,12 +1089,131 @@ h2 {
 
 .machine-layout-fields {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
 }
 
 .machine-layout-fields.is-inherited {
-  opacity: 0.72;
+  opacity: 0.84;
+}
+
+.legacy-layout-input {
+  display: none !important;
+}
+
+.machine-matrix-designer {
+  display: grid;
+  gap: 10px;
+}
+
+.matrix-designer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.matrix-designer-head strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.matrix-preview {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.matrix-designer-row {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.matrix-row-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.matrix-cells {
+  display: grid;
+  grid-template-columns: repeat(var(--matrix-columns), minmax(10px, 1fr));
+  gap: 4px;
+  min-width: 0;
+}
+
+.matrix-cell {
+  aspect-ratio: 1;
+  min-width: 0;
+  max-height: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.matrix-cell.filled {
+  border-color: rgba(53, 231, 154, 0.38);
+  background: rgba(53, 231, 154, 0.2);
+}
+
+.matrix-row-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 28px);
+  gap: 4px;
+}
+
+.matrix-row-actions button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.matrix-row-actions button:disabled,
+.matrix-designer-head button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.matrix-designer-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.machine-product-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.machine-products-list {
+  display: grid;
+  gap: 8px;
+}
+
+.machine-product-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.machine-product-row span {
+  min-width: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 850;
+  overflow-wrap: anywhere;
 }
 
 .settings-panel label,
@@ -2326,8 +2475,25 @@ input {
 @media (max-width: 760px) {
   .settings-grid,
   .machine-admin-row,
-  .machine-layout-fields {
+  .machine-layout-fields,
+  .settings-access-switch,
+  .machine-product-add,
+  .machine-product-row {
     grid-template-columns: 1fr;
+  }
+
+  .matrix-designer-row {
+    grid-template-columns: 46px minmax(0, 1fr) auto;
+    gap: 6px;
+  }
+
+  .matrix-row-actions {
+    grid-template-columns: repeat(3, 25px);
+  }
+
+  .matrix-row-actions button {
+    width: 25px;
+    height: 25px;
   }
 
   .machine-menu-list {

@@ -96,6 +96,10 @@ Maquinas/configuracion:
 - renderMachineMenu()
 - switchActiveMachine()
 - renderSettings()
+- setSettingsScope()
+- renderMachineProductsManager()
+- assignProductToActiveMachine()
+- removeProductFromActiveMachine()
 - createMachine()
 - handleCreateMachine()
 - saveSettings()
@@ -192,9 +196,9 @@ PUNTOS DE CUIDADO
 7. Si se cambia schema Convex, ejecutar npx.cmd convex dev --once contra el deployment usado.
 8. No reintroducir kc-01 como fallback obligatorio.
 9. No mezclar records/monthClosures/yearClosures entre maquinas; usar machineScoped() en frontend.
-10. No asignar todo products a la maquina activa si existe machineProductIds.
+10. No volver a usar machineProductIds como filtro operativo; products es catalogo global.
 11. No usar la estructura visual de una maquina existente como plantilla implicita al crear desde cero.
-12. Reset de maquina no borra catalogo ni productos asignados.
+12. Reset de maquina no borra catalogo ni layout visual.
 13. El boton Stock de prueba fue eliminado y no debe volver a operacion diaria.
 14. monthlyFloorCost es sugerencia mensual: no debe multiplicarse por meses sin records.
 15. Los meses cerrados deben mostrar floorFee/bankCommissionPercent desde el cierre, no desde settings actuales.

@@ -40,11 +40,11 @@ La estructura historica por defecto es:
 - E01-E10
 - F01-F10
 
-La estructura por defecto tiene 50 espacios fisicos, pero las maquinas nuevas pueden definir filas y espacios por fila al crearse.
+La estructura por defecto tiene 50 espacios fisicos, pero las maquinas nuevas usan el diseñador visual para definir filas personalizadas y espacios por fila.
 
 Cada espacio tiene selector de producto.
-La matriz inicial esta vacia porque baseProductLayout = {}.
-Los selectores toman productos asignados a la maquina activa, no todo el catalogo global.
+La matriz inicial desde cero esta vacia porque visualLayout inicia EMPTY.
+Los selectores toman el catalogo global products.
 
 FUSION VISUAL
 
@@ -119,14 +119,14 @@ Si existe stock anterior:
 
 ORDEN CONTABLE
 
-El orden contable viene del catalogo de productos y maquina_productos/machineProductIds de la maquina activa.
+El orden contable viene del catalogo global de productos. maquina_productos/machineProductIds queda como compatibilidad normalizada, no como lista operativa separada por maquina.
 No depende del orden visual de la matriz.
 
 CATALOGO Y RELACION MAQUINA-PRODUCTO
 
 Concepto actual:
 - products: catalogo global.
-- machineProductIds: relacion frontend por id de maquina.
+- machineProductIds: compatibilidad legacy por id de maquina; la UI usa products como catalogo global.
 - maquina_productos: relacion normalizada en Convex.
 
 Crear maquina desde cero:
@@ -156,6 +156,10 @@ machine.settings contiene datos operativos:
 - fuelReminderEveryVisits
 - monthlyFloorCost
 
+Cada maquina contiene rowSizes y puede contener visualLayout con productos por coordenada. Los productos son globales; no hay asignacion operativa separada por maquina.
+El catalogo global no implica que todos los productos aparezcan en una maquina.
+La presencia de un producto en una maquina se gestiona desde su posicion visual en la matriz.
+
 La comision bancaria se calcula con la configuracion de la maquina activa.
 El derecho de piso mensual se usa como sugerencia al cerrar mes.
 El cierre mensual guarda el valor usado como snapshot en floorFee y la comision usada en bankCommissionPercent para que el historico no cambie si luego cambia la configuracion.
@@ -167,7 +171,7 @@ RESET / INACTIVACION / ELIMINACION
 
 Reset de maquina:
 - Limpia records, monthClosures y yearClosures de esa maquina.
-- Conserva maquina, settings, productos asignados y catalogo global.
+- Conserva maquina, settings, layout visual y catalogo global.
 
 Inactivar maquina:
 - Cambia status a inactive.
