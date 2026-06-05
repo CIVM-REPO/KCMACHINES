@@ -229,11 +229,12 @@ Si se cierra diciembre:
 CATALOGO
 
 Cambios de catalogo global:
-- Si la maquina activa no tiene historial ni cierres, se aplican inmediatamente para facilitar estado cero.
-- Si ya hay historial/cierres, se programan para el siguiente mes mediante pendingProducts.
+- Agregar un producto nuevo se aplica inmediatamente al catalogo global porque no existe en historial previo.
+- Si hay pendingProducts, el producto nuevo tambien se agrega a esa version pendiente para que no desaparezca al aplicar cambios programados.
+- Editar o eliminar productos existentes mantiene la proteccion historica: si ya hay historial/cierres, se programa para el siguiente mes mediante pendingProducts.
 
 Motivo:
-- Evitar cambiar columnas/precios dentro del mes actual.
+- Evitar cambiar columnas/precios historicos de productos existentes dentro del mes actual.
 
 Al agregar un producto desde Productos, se agrega al catalogo global compartido.
 Para usarlo en una maquina, se selecciona directamente en la posicion visual de la matriz.

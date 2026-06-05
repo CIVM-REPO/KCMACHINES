@@ -1,0 +1,285 @@
+No hagas solo cambios visuales superficiales. Revisa la causa real del bug de estado y de recarga de imágenes. Prioriza una solución estable antes que un parche rápido.
+
+Actúa como desarrollador senior del proyecto. Necesito que revises e implementes los siguientes cambios relacionados con la creación, configuración y visualización de máquinas.
+
+## Objetivo general
+
+Mejorar la experiencia de creación de nuevas máquinas, separar mejor los ajustes por contexto, corregir errores de inicialización de datos y optimizar la carga de imágenes, especialmente en iPhone.
+
+---
+
+# 1. Submenú de selección de máquina
+
+## Problema actual
+
+El submenú donde se selecciona la máquina no se despliega de forma clara. Actualmente se siente como parte del mismo menú y no se entiende bien que es un submenú.
+
+## Cambio requerido
+
+Modificar el comportamiento visual del submenú para que:
+
+* Se despliegue hacia la derecha.
+* Visualmente se entienda que es un submenú.
+* Tenga separación, borde, sombra o cualquier tratamiento visual adecuado para diferenciarlo del menú principal.
+* En móvil, especialmente iPhone, asegurar que el submenú no se salga de la pantalla. Si no cabe hacia la derecha, debe adaptarse correctamente.
+
+## Criterios de aceptación
+
+* Al abrir el menú de máquinas, el submenú se muestra claramente como una sección secundaria.
+* En desktop se despliega hacia la derecha.
+* En móvil no rompe el layout ni queda cortado.
+* La interacción debe ser clara y estable.
+
+---
+
+# 2. Bug al crear máquinas desde cero
+
+## Problema actual
+
+Al crear una máquina desde cero, la sección de productos aparece con una lista de productos ya cargada, aunque debería estar vacía.
+
+También parece que la nueva máquina está heredando o precargando la estructura base de una máquina ya existente.
+
+Además, el flujo no pide datos esenciales como:
+
+* Cantidad de filas.
+* Cantidad de espacios por fila.
+
+## Comportamiento esperado
+
+Cuando el usuario elija crear una máquina desde cero:
+
+1. La máquina debe iniciar sin productos cargados.
+2. No debe copiar productos, filas, slots ni configuración específica de otra máquina existente.
+3. Debe solicitar explícitamente:
+
+   * Número de filas.
+   * Número de espacios por fila.
+4. Con esos datos, debe generar una estructura nueva y vacía.
+5. Cada espacio debe quedar disponible para asignar producto posteriormente.
+
+## Criterios de aceptación
+
+* Crear una máquina desde cero genera una máquina completamente limpia.
+* No aparece ningún producto precargado.
+* La estructura se crea únicamente a partir de los valores ingresados por el usuario.
+* El usuario no puede finalizar correctamente la creación sin definir filas y espacios por fila.
+* La máquina nueva no comparte referencias mutables con ninguna otra máquina existente.
+
+## Nota técnica importante
+
+Revisar si el bug viene de:
+
+* Reutilización accidental de estado.
+* Copia superficial en lugar de deep clone.
+* Valores por defecto tomados de una máquina existente.
+* Persistencia local que se está rehidratando de forma incorrecta.
+* Componentes que usan datos globales en vez de datos específicos de la máquina actual.
+
+---
+
+# 3. Separar ajustes de máquina y ajustes generales
+
+## Problema actual
+
+Los ajustes están mezclados. No queda claro qué configuraciones afectan solo a la máquina actual y cuáles afectan a toda la aplicación o al sistema general.
+
+## Cambio requerido
+
+Crear dos botones o accesos claramente separado
+configuaracion de esta maquina 
+configuraciones generales 
+
+## Criterios de aceptación
+
+* El usuario puede distinguir fácilmente entre ajustes locales y globales.
+* Cambiar ajustes de una máquina no debe afectar a otras máquinas.
+* Cambiar ajustes generales solo debe modificar comportamiento global esperado.
+* La UI debe evitar mezclar ambos tipos de configuración en el mismo panel sin separación clara.
+
+---
+
+# 4. Delimitación visual entre funcionalidades
+
+## Problema actual
+
+Las áreas funcionales se sienten mezcladas visualmente. Por ejemplo, crear una nueva máquina y ver la lista de máquinas creadas están en el mismo espacio, pero no se perciben como secciones separadas.
+
+## Cambio requerido
+
+Mejorar la jerarquía visual y separación entre áreas funcionales.
+
+Aplicar mejoras como:
+
+* Contenedores separados.
+* Títulos claros por sección.
+* Bordes suaves.
+* Espaciado vertical.
+* Fondos ligeramente diferenciados.
+* Divisores visuales.
+* Tarjetas o paneles independientes.
+
+## Áreas que deben sentirse separadas
+
+* Crear nueva máquina.
+* Lista de máquinas existentes.
+* Selección de máquina.
+* Ajustes de máquina.
+* Ajustes generales.
+* Gestión de productos dentro de una máquina.
+
+## Criterios de aceptación
+
+* Cada funcionalidad se entiende como un bloque independiente.
+* La interfaz no se siente saturada ni mezclada.
+* El diseño sigue siendo compacto, pero con mejor estructura visual.
+* En móvil debe mantenerse claro y usable.
+
+---
+
+# 5. Optimización de carga de imágenes en iPhone
+
+## Problema actual
+
+En iPhone parece que todas las imágenes se vuelven a descargar o recargar cuando se inserta/modifica el dato de un producto. Esto genera una experiencia molesta y lenta.
+
+Ya habíamos acordado que las imágenes debían quedar precargadas/cacheadas para evitar recargas constantes.
+
+## Cambio requerido
+
+Revisar y corregir el comportamiento de carga de imágenes para que:
+
+* Las imágenes no se vuelvan a descargar innecesariamente al editar datos de producto.
+* La UI no fuerce remounts completos de los componentes de imagen.
+* Las imágenes ya cargadas permanezcan disponibles en memoria o cache.
+* El cambio de un dato de producto no provoque la recarga visual de todas las imágenes.
+* El comportamiento sea estable en iPhone/Safari.
+
+## Posibles causas técnicas a revisar
+
+* Keys dinámicas que cambian en cada render.
+* Componentes de imagen que se desmontan y montan de nuevo.
+* Estado global que provoca rerender masivo.
+* URLs de imágenes regeneradas con query params o blobs nuevos.
+* Falta de memoización.
+* Falta de cache local.
+* Uso incorrecto de object URLs.
+* Actualizaciones de estado que reemplazan toda la lista de productos en lugar de modificar solo el elemento afectado.
+* Problemas específicos de Safari/iOS con cache de imágenes.
+
+## Recomendaciones técnicas
+
+Implementar o revisar:
+
+* Memoización de componentes de imagen.
+* Keys estables por producto o slot.
+* Actualización granular del estado.
+* Evitar recrear arrays/objetos completos si no es necesario.
+* Cache de imágenes por URL o ID de producto.
+* Preload de imágenes al cargar la máquina.
+* Evitar que editar un campo de producto afecte el render de imágenes no relacionadas.
+* Verificar el comportamiento específicamente en Safari iOS.
+
+## Criterios de aceptación
+
+* Editar un producto no recarga todas las imágenes.
+* Las imágenes ya visibles permanecen cargadas.
+* En iPhone la experiencia debe sentirse fluida.
+* No deben aparecer parpadeos, placeholders repetidos o recargas masivas.
+* La optimización no debe romper la actualización correcta de imágenes cuando realmente cambian.
+
+---
+
+# 6. Revisión de arquitectura de estado
+
+Además de implementar los cambios visibles, revisar la arquitectura de estado relacionada con máquinas, productos e imágenes.
+
+## Validar que exista separación clara entre:
+
+* Datos globales.
+* Datos por máquina.
+* Datos temporales de creación.
+* Datos persistidos.
+* Datos derivados para render.
+
+## Evitar
+
+* Mutaciones directas de estado.
+* Compartir referencias entre máquinas.
+* Reutilizar estructuras base con productos ya cargados.
+* Usar la máquina seleccionada como plantilla implícita cuando se crea una máquina desde cero.
+* Rerenderizar toda la pantalla por cambios pequeños.
+
+---
+
+# 7. Resultado esperado
+
+Al finalizar, la aplicación debe permitir:
+
+1. Crear una máquina desde cero de forma limpia.
+2. Definir filas y espacios por fila antes de generar la estructura.
+3. Ver la nueva máquina sin productos precargados.
+4. Distinguir claramente entre ajustes de la máquina actual y ajustes generales.
+5. Navegar el submenú de máquinas de forma más clara.
+6. Entender visualmente cada bloque funcional de la interfaz.
+7. Editar productos sin que todas las imágenes se recarguen, especialmente en iPhone.
+
+---
+
+# 8. Entregables esperados
+
+Al terminar, proporciona:
+
+* Resumen de archivos modificados.
+* Explicación breve de los cambios realizados.
+* Bugs corregidos.
+* Cambios en la estructura de estado, si aplica.
+* Qué se hizo para evitar recargas innecesarias de imágenes.
+* Cómo probar manualmente cada cambio.
+* Cualquier limitación pendiente o riesgo técnico detectado.
+
+---
+
+# 9. Pruebas manuales mínimas
+
+Ejecutar estas pruebas antes de dar el trabajo por terminado:
+
+## Crear máquina desde cero
+
+1. Ir a crear nueva máquina.
+2. Elegir crear desde cero.
+3. Confirmar que pide filas y espacios por fila.
+4. Crear máquina.
+5. Confirmar que aparece vacía, sin productos.
+6. Confirmar que la estructura coincide con los valores ingresados.
+
+## Validar independencia entre máquinas
+
+1. Crear dos máquinas diferentes.
+2. Editar productos en una.
+3. Confirmar que la otra no cambia.
+4. Cambiar ajustes de una máquina.
+5. Confirmar que no afecta a las demás.
+
+## Validar ajustes separados
+
+1. Abrir ajustes de esta máquina.
+2. Confirmar que solo aparecen opciones locales.
+3. Abrir ajustes generales.
+4. Confirmar que solo aparecen opciones globales.
+
+## Validar submenú
+
+1. Abrir menú de selección de máquinas en desktop.
+2. Confirmar que el submenú se despliega hacia la derecha.
+3. Probar en móvil.
+4. Confirmar que no se corta ni rompe el layout.
+
+## Validar imágenes en iPhone
+
+1. Abrir una máquina con varios productos con imagen.
+2. Editar un dato de un producto.
+3. Confirmar que las imágenes no se recargan todas.
+4. Confirmar que no hay parpadeos ni placeholders innecesarios.
+5. Repetir en Safari iOS si es posible.
+

@@ -147,6 +147,35 @@ body.menu-open .app-shell > *:not(.topbar):not(.menu-backdrop) {
   padding: 0 12px;
 }
 
+.app-menu button#machineSwitcher {
+  border-color: color-mix(in srgb, var(--machine-accent, var(--green)) 46%, rgba(255, 255, 255, 0.12));
+  color: var(--text);
+  box-shadow: inset 3px 0 0 var(--machine-accent, var(--green));
+}
+
+.machine-menu-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.machine-menu-option::before,
+.active-machine-chip::before,
+.machine-color-dot {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border-radius: 50%;
+  background: var(--machine-accent, var(--green));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--machine-accent, var(--green)) 18%, transparent);
+}
+
+.machine-menu-option:disabled {
+  border-color: color-mix(in srgb, var(--machine-accent, var(--green)) 46%, rgba(255, 255, 255, 0.12));
+}
+
 .app-menu .menu-bottom-button {
   margin-top: 18px;
   border-color: rgba(70, 184, 255, 0.24);
@@ -226,8 +255,35 @@ h2 {
 
 .date-control {
   display: flex;
+  gap: 8px;
+  align-items: center;
   justify-content: flex-end;
   position: relative;
+}
+
+.active-machine-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 30px;
+  border: 1px solid color-mix(in srgb, var(--machine-accent, var(--green)) 42%, rgba(255, 255, 255, 0.12));
+  border-radius: 8px;
+  padding: 0 10px;
+  background: color-mix(in srgb, var(--machine-accent, var(--green)) 14%, rgba(255, 255, 255, 0.04));
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.topbar-machine-chip {
+  margin-top: 8px;
+}
+
+.view-machine-chip {
+  margin-top: 8px;
 }
 
 .top-action {
@@ -2673,6 +2729,25 @@ input {
   h1 {
     font-size: clamp(18px, 5vw, 24px);
     line-height: 1.12;
+  }
+
+  .active-machine-chip {
+    min-height: 28px;
+    padding: 0 8px;
+    font-size: 11px;
+  }
+
+  .topbar-machine-chip {
+    margin-top: 5px;
+  }
+
+  .date-control {
+    flex-wrap: wrap;
+    justify-content: stretch;
+  }
+
+  .date-control .active-machine-chip {
+    width: 100%;
   }
 
   .top-action {

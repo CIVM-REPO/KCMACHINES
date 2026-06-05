@@ -41,6 +41,7 @@ let productOrder = new Map();
 const productImageVersion = "20260602-product-cache";
 const preloadedProductImages = new Set();
 const productColors = ["#46b8ff", "#35e79a", "#f8c45c", "#ef7b8c", "#b98cff", "#72dfdf", "#ff9d5c", "#a6f06f"];
+const machineColors = ["#35e79a", "#46b8ff", "#f8c45c", "#ef7b8c", "#b98cff", "#72dfdf", "#ff9d5c", "#a6f06f", "#ff6fcb", "#b7f36d"];
 const monthNamesShort = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 const baseProductLayout = {};
 const defaultMachineSettings = {
@@ -63,6 +64,7 @@ let currentVisitDetails = new Map();
 let activeSlotCode = null;
 
 const machineTarget = document.getElementById("machineOperator");
+const machineContextLabels = document.querySelectorAll("[data-machine-context]");
 const slotDialog = document.getElementById("slotDialog");
 const slotDialogCode = document.getElementById("slotDialogCode");
 const slotDialogTitle = document.getElementById("slotDialogTitle");
@@ -428,6 +430,20 @@ function activeMachineName() {
   return activeMachine()?.name || "Sin maquina";
 }
 
+function hashString(value) {
+  return String(value || "").split("").reduce((hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) | 0, 0);
+}
+
+function machineAccent(machine = activeMachine()) {
+  if (!machine) return "#5f7480";
+  const index = Math.abs(hashString(machine.id || machine.name)) % machineColors.length;
+  return machineColors[index];
+}
+
+function machineContextLabel(machine = activeMachine()) {
+  return machine ? `Maquina: ${machine.name}` : "Sin maquina activa";
+}
+
 function activeMachineProductNames() {
   return products.map((product) => product.name);
 }
@@ -445,8 +461,16 @@ function ensureProductAssignedToActiveMachine(productName) {
 }
 
 function updateMachineChrome() {
+  const machine = activeMachine();
+  const accent = machineAccent(machine);
   machineSwitcher.textContent = activeMachineName();
-  document.body.classList.toggle("no-active-machine", !activeMachine());
+  machineSwitcher.style.setProperty("--machine-accent", accent);
+  machineContextLabels.forEach((label) => {
+    label.textContent = machineContextLabel(machine);
+    label.style.setProperty("--machine-accent", accent);
+  });
+  document.body.style.setProperty("--machine-accent", accent);
+  document.body.classList.toggle("no-active-machine", !machine);
   zeroStatePanel.hidden = Boolean(activeMachine());
   renderMachineMenu();
 }
@@ -2128,8 +2152,8 @@ function renderMachineMenu() {
   const activeMachines = state.machines.filter((machine) => machine.status !== "inactive");
   const inactiveMachines = state.machines.filter((machine) => machine.status === "inactive");
   const row = (machine) => `
-    <button type="button" data-switch-machine="${machine.id}"${machine.id === state.activeMachineId ? " disabled" : ""}>
-      ${escapeHtml(machine.name)}${machine.status === "inactive" ? " (inactiva)" : ""}
+    <button type="button" class="machine-menu-option" style="--machine-accent: ${machineAccent(machine)}" data-switch-machine="${machine.id}"${machine.id === state.activeMachineId ? " disabled" : ""}>
+      <span>${escapeHtml(machine.name)}${machine.status === "inactive" ? " (inactiva)" : ""}</span>
     </button>
   `;
   machineMenuList.innerHTML = `
@@ -2183,7 +2207,7 @@ function renderSettings() {
     return `
       <article class="machine-admin-row">
         <div>
-          <strong>${escapeHtml(item.name)}</strong>
+          <strong><span class="machine-color-dot" style="--machine-accent: ${machineAccent(item)}"></span>${escapeHtml(item.name)}</strong>
           <span>${item.status === "inactive" ? "Inactiva" : "Activa"} - ${sizes.length} filas, ${spaces} espacios</span>
         </div>
         <button type="button" data-admin-switch="${item.id}"${item.id === state.activeMachineId ? " disabled" : ""}>Usar</button>
@@ -2630,8 +2654,11 @@ function productEditorRow(product, index) {
 function renderProductsEditor() {
   const draftProducts = catalogDraftProducts();
   const effectiveMonth = catalogDraftEffectiveMonth();
+  const pendingNotice = state.pendingProducts
+    ? `<div class="products-empty">Cambios de catalogo programados para ${effectiveMonth}.</div>`
+    : "";
   productsTable.innerHTML = draftProducts.length
-    ? `<div class="products-empty">Cambios de catalogo programados para ${effectiveMonth}.</div>${draftProducts.map(productEditorRow).join("")}`
+    ? `${pendingNotice}${draftProducts.map(productEditorRow).join("")}`
     : `<div class="products-empty">No hay productos guardados.</div>`;
 
   productsTable.querySelectorAll("[data-product-save]").forEach((button) => {
@@ -2720,24 +2747,33 @@ function deleteProduct(index) {
 
 function addProduct(event) {
   event.preventDefault();
-  const draftProducts = catalogDraftProducts();
+  const currentProducts = catalogSnapshot(products);
+  const pendingProducts = state.pendingProducts ? normalizeProducts(state.pendingProducts) : null;
   const name = normalizeProductName(productNameInput.value);
   if (!name) {
     showToast("Escribe el nombre del producto");
     return;
   }
-  if (productCatalogItemFrom(draftProducts, name)) {
+  if (productCatalogItemFrom(currentProducts, name) || productCatalogItemFrom(pendingProducts, name)) {
     showToast("Ese producto ya existe");
     return;
   }
 
-  draftProducts.push({
+  const newProduct = {
     name,
     cost: Number(productCostInput.value || 0),
     price: Number(productPriceInput.value || 0)
-  });
+  };
+  state.products = normalizeProducts([...currentProducts, newProduct]);
+  if (pendingProducts) state.pendingProducts = normalizeProducts([...pendingProducts, newProduct]);
+  syncProductCatalog();
+  refreshCurrentSlotCatalogValues();
   productForm.reset();
-  scheduleCatalogChange(draftProducts, "Producto agregado al catalogo");
+  saveState();
+  renderProductsEditor();
+  buildMachine();
+  updateSummary();
+  showToast("Producto agregado al catalogo");
 }
 
 function summaryFromClosure(closure) {
