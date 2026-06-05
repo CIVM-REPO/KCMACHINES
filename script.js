@@ -114,7 +114,9 @@ const zeroCreateMachine = document.getElementById("zeroCreateMachine");
 const currencyInput = document.getElementById("currencyInput");
 const languageInput = document.getElementById("languageInput");
 const visualPreferencesInput = document.getElementById("visualPreferencesInput");
+const startMachineCreateButton = document.getElementById("startMachineCreateButton");
 const machineCreateForm = document.getElementById("machineCreateForm");
+const cancelMachineCreateButton = document.getElementById("cancelMachineCreateButton");
 const newMachineNameInput = document.getElementById("newMachineNameInput");
 const inheritMachineSelect = document.getElementById("inheritMachineSelect");
 const machineLayoutFields = document.getElementById("machineLayoutFields");
@@ -146,6 +148,7 @@ let activeMonthCard = null;
 let expandedSalesCard = null;
 let settingsScope = "machine";
 let createMachineRowSizes = defaultRowSizes.slice();
+let isCreatingMachine = false;
 
 function loadState() {
   try {
@@ -2137,7 +2140,7 @@ function renderMachineMenu() {
   machineMenuList.querySelectorAll("[data-switch-machine]").forEach((button) => {
     button.addEventListener("click", () => switchActiveMachine(button.dataset.switchMachine));
   });
-  machineMenuList.querySelector("[data-open-settings]")?.addEventListener("click", showSettingsView);
+  machineMenuList.querySelector("[data-open-settings]")?.addEventListener("click", openCreateMachineForm);
 }
 
 function switchActiveMachine(machineId) {
@@ -2156,11 +2159,13 @@ function renderSettings() {
   currencyInput.value = state.globalSettings.currency || "USD";
   languageInput.value = state.globalSettings.language || "";
   visualPreferencesInput.value = "";
+  machineCreateForm.hidden = !isCreatingMachine;
+  startMachineCreateButton.hidden = isCreatingMachine;
   inheritMachineSelect.innerHTML = `
     <option value="">Iniciar desde cero</option>
     ${state.machines.map((machine) => `<option value="${machine.id}">Heredar matriz de ${escapeHtml(machine.name)}</option>`).join("")}
   `;
-  updateCreateMachineLayoutFields();
+  if (isCreatingMachine) updateCreateMachineLayoutFields();
 
   const machine = activeMachine();
   machineSettingsEmpty.hidden = Boolean(machine);
@@ -2212,6 +2217,25 @@ function applySettingsScope() {
   globalSettingsPanel.hidden = machineSelected;
   machineSettingsAccess.setAttribute("aria-selected", String(machineSelected));
   globalSettingsAccess.setAttribute("aria-selected", String(!machineSelected));
+}
+
+function resetCreateMachineForm() {
+  machineCreateForm.reset();
+  inheritMachineSelect.value = "";
+  createMachineRowSizes = defaultRowSizes.slice();
+}
+
+function openCreateMachineForm() {
+  isCreatingMachine = true;
+  settingsScope = "global";
+  showSettingsView();
+  newMachineNameInput.focus();
+}
+
+function closeCreateMachineForm() {
+  isCreatingMachine = false;
+  resetCreateMachineForm();
+  renderSettings();
 }
 
 function machineHasHistory(machineId) {
@@ -2395,9 +2419,8 @@ function handleCreateMachine(event) {
   }
   const machine = createMachine(newMachineNameInput.value, { sourceMachineId, rowSizes });
   if (!machine) return;
-  machineCreateForm.reset();
-  createMachineRowSizes = defaultRowSizes.slice();
-  updateCreateMachineLayoutFields();
+  isCreatingMachine = false;
+  resetCreateMachineForm();
   showToast("Maquina creada");
 }
 
@@ -3517,7 +3540,9 @@ backToMainFromProducts.addEventListener("click", showMainView);
 backToMainFromSettings.addEventListener("click", showMainView);
 productForm.addEventListener("submit", addProduct);
 settingsViewButton.addEventListener("click", showSettingsView);
-zeroCreateMachine.addEventListener("click", showSettingsView);
+zeroCreateMachine.addEventListener("click", openCreateMachineForm);
+startMachineCreateButton.addEventListener("click", openCreateMachineForm);
+cancelMachineCreateButton.addEventListener("click", closeCreateMachineForm);
 machineCreateForm.addEventListener("submit", handleCreateMachine);
 inheritMachineSelect.addEventListener("change", updateCreateMachineLayoutFields);
 addMatrixRowButton.addEventListener("click", addCreateMachineRow);

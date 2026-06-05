@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>KC Machines - Control de ventas</title>
-    <link rel="stylesheet" href="styles.css?v=20260604-matrix-designer">
+    <link rel="stylesheet" href="styles.css?v=20260605-create-panel">
   </head>
   <body>
     <main class="app-shell">
@@ -209,9 +209,13 @@
               Preferencias visuales futuras
               <input id="visualPreferencesInput" type="text" autocomplete="off" placeholder="Pendiente">
             </label>
-            <form class="machine-create-form" id="machineCreateForm">
+            <button class="save-date-button create-machine-toggle" id="startMachineCreateButton" type="button">Crear nueva maquina</button>
+            <form class="machine-create-form" id="machineCreateForm" hidden>
               <div class="settings-subsection">
-                <h3>Crear nueva maquina</h3>
+                <div class="settings-subsection-head">
+                  <h3>Crear nueva maquina</h3>
+                  <button class="top-action" id="cancelMachineCreateButton" type="button">Cancelar</button>
+                </div>
                 <label>
                   Nueva maquina
                   <input id="newMachineNameInput" type="text" autocomplete="off" placeholder="Nombre de maquina">
@@ -323,6 +327,6 @@
 
     </main>
     <script src="convex-config.js?v=20260601-convex-sync"></script>
-    <script src="script.js?v=20260604-matrix-designer"></script>
+    <script src="script.js?v=20260605-create-panel"></script>
   </body>
 </html>

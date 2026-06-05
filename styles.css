@@ -1056,12 +1056,14 @@ h2 {
 
 .settings-view[data-settings-scope] .settings-grid {
   grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
 }
 
 .settings-panel {
   display: grid;
   align-content: start;
   gap: 14px;
+  width: min(100%, 920px);
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1087,6 +1089,13 @@ h2 {
   font-size: 14px;
 }
 
+.settings-subsection-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .machine-layout-fields {
   display: grid;
   gap: 10px;
@@ -1103,6 +1112,7 @@ h2 {
 .machine-matrix-designer {
   display: grid;
   gap: 10px;
+  max-width: 560px;
 }
 
 .matrix-designer-head {
@@ -1119,15 +1129,20 @@ h2 {
 
 .matrix-preview {
   display: grid;
-  gap: 7px;
+  gap: 8px;
   min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .matrix-designer-row {
   display: grid;
-  grid-template-columns: 54px minmax(0, 1fr) auto;
-  gap: 8px;
+  grid-template-columns: 48px minmax(0, auto) auto;
+  gap: 10px;
   align-items: center;
+  justify-content: start;
 }
 
 .matrix-row-label {
@@ -1138,15 +1153,14 @@ h2 {
 
 .matrix-cells {
   display: grid;
-  grid-template-columns: repeat(var(--matrix-columns), minmax(10px, 1fr));
-  gap: 4px;
+  grid-template-columns: repeat(var(--matrix-columns), 16px);
+  gap: 5px;
   min-width: 0;
 }
 
 .matrix-cell {
-  aspect-ratio: 1;
-  min-width: 0;
-  max-height: 20px;
+  width: 16px;
+  height: 16px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.055);
@@ -1240,6 +1254,11 @@ h2 {
 .settings-actions {
   display: grid;
   gap: 10px;
+}
+
+.machine-create-form[hidden],
+.create-machine-toggle[hidden] {
+  display: none;
 }
 
 .machine-admin-list {
@@ -2483,12 +2502,24 @@ input {
   }
 
   .matrix-designer-row {
-    grid-template-columns: 46px minmax(0, 1fr) auto;
+    grid-template-columns: 1fr;
     gap: 6px;
+  }
+
+  .matrix-cells {
+    grid-template-columns: repeat(var(--matrix-columns), minmax(11px, 1fr));
+    gap: 4px;
+  }
+
+  .matrix-cell {
+    width: auto;
+    height: auto;
+    aspect-ratio: 1;
   }
 
   .matrix-row-actions {
     grid-template-columns: repeat(3, 25px);
+    justify-content: start;
   }
 
   .matrix-row-actions button {
