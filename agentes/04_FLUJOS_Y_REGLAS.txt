@@ -33,6 +33,19 @@ Al cambiar de maquina:
 - saveState() persiste activeMachineId.
 - loadDate() repinta matriz, historial, resumen y cierres filtrados por machineId.
 
+CREACION DE MAQUINA
+
+Crear desde cero:
+- Requiere nombre, filas y espacios por fila.
+- Crea machineProductIds vacio para la nueva maquina.
+- Crea rowSizes propio de la maquina.
+- No copia productos, settings, matriz, visitas, cierres ni stock de otra maquina.
+
+Heredar productos:
+- Requiere nombre, filas y espacios por fila.
+- Copia solo machineProductIds desde la maquina origen.
+- No copia settings, matriz, visitas, cierres ni stock.
+
 REGLA LOCAL VS REMOTO
 
 Si local tiene datos pero remoto esta limpio:
@@ -197,6 +210,9 @@ Guarda:
 
 La comision bancaria viene de machine.settings.bankCommissionPercent.
 El derecho de piso se precarga desde machine.settings.monthlyFloorCost, pero el valor final guardado en el cierre puede editarse.
+En el mes abierto, accountingSummaryForRecords aplica monthlyFloorCost solo si hay records en ese mes.
+Los meses vacios del anio no suman derecho de piso en el panel anual.
+Si el mes seleccionado ya esta cerrado, renderAccounting usa summaryFromClosure() para respetar el floorFee guardado como snapshot.
 
 Si se cierra diciembre:
 - crea yearClosures
@@ -267,6 +283,8 @@ Los informes usan helpers compatibles:
 - recordSalesMovements(record)
 - recordNextStock(record)
 - productTotalsForRecords(records)
+- accountingSummaryForRecords(records)
 
 Si record tiene visitDetails, los movimientos salen de UV y stock sale de NS.
 Si record es viejo, hay fallback.
+Los gastos operativos anuales suman floorFee desde cierres guardados o meses abiertos con visitas; no desde meses vacios.

@@ -31,7 +31,8 @@ Donde:
 
 CAPA VISUAL
 
-La maquina visual usa espacios fisicos:
+La maquina visual usa espacios fisicos definidos por la configuracion de filas de cada maquina.
+La estructura historica por defecto es:
 - A01-A05
 - B01-B05
 - C01-C10
@@ -39,7 +40,7 @@ La maquina visual usa espacios fisicos:
 - E01-E10
 - F01-F10
 
-Hay 50 espacios fisicos.
+La estructura por defecto tiene 50 espacios fisicos, pero las maquinas nuevas pueden definir filas y espacios por fila al crearse.
 
 Cada espacio tiene selector de producto.
 La matriz inicial esta vacia porque baseProductLayout = {}.
@@ -130,6 +131,8 @@ Concepto actual:
 
 Crear maquina desde cero:
 - Crea la maquina.
+- Solicita filas y espacios por fila.
+- Genera una matriz vacia desde esa estructura.
 - No asigna productos.
 - No copia matriz.
 - No copia visitas, detalles, cierres, stock ni ventas.
@@ -138,6 +141,7 @@ Crear maquina heredando productos:
 - Crea la maquina.
 - Copia solo la relacion producto-maquina desde otra maquina.
 - No duplica productos globales.
+- Usa la estructura de filas/espacios ingresada para la nueva maquina.
 - No copia historial ni stock.
 
 CONFIGURACION
@@ -155,6 +159,9 @@ machine.settings contiene datos operativos:
 La comision bancaria se calcula con la configuracion de la maquina activa.
 El derecho de piso mensual se usa como sugerencia al cerrar mes.
 El cierre mensual guarda el valor usado como snapshot en floorFee y la comision usada en bankCommissionPercent para que el historico no cambie si luego cambia la configuracion.
+En informes, monthlyFloorCost solo se aplica al resumen de un mes abierto cuando ese mes tiene visitas guardadas.
+Los meses vacios no suman derecho de piso al acumulado anual.
+Si el mes ya tiene cierre, los informes usan el floorFee snapshot del cierre y no la configuracion actual de la maquina.
 
 RESET / INACTIVACION / ELIMINACION
 

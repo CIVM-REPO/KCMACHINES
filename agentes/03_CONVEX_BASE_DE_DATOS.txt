@@ -103,7 +103,8 @@ Campos:
 - updatedAt
 
 Estado actual:
-- 50 filas.
+- La cantidad de filas normalizadas depende de configuracionFilas/rowSizes de la maquina activa.
+- La estructura historica por defecto genera 50 espacios.
 - idProducto null en arranque limpio.
 
 Uso:

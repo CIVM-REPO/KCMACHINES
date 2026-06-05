@@ -2,8 +2,8 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
 const EMPTY_PRODUCT = "EMPTY";
-const rowSizes = [5, 5, 10, 10, 10, 10];
-const rowLetters = ["A", "B", "C", "D", "E", "F"];
+const defaultRowSizes = [5, 5, 10, 10, 10, 10];
+const rowLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
 function productId(productName) {
   return String(productName || "").trim().toUpperCase();
@@ -23,6 +23,25 @@ function normalizedProducts(appState) {
     .filter((product) => product.idProducto && !seen.has(product.idProducto) && seen.add(product.idProducto));
 }
 
+function rowSizesFromConfig(configRows) {
+  if (!Array.isArray(configRows)) return null;
+  return configRows
+    .map((row) => Math.trunc(Number(row?.spaces ?? row?.espacios)))
+    .filter((size) => size >= 1 && size <= 12);
+}
+
+function normalizeRowSizes(value) {
+  const source = Array.isArray(value) && value.length ? value : defaultRowSizes;
+  return source
+    .map((size) => Math.trunc(Number(size)))
+    .filter((size) => size >= 1 && size <= 12)
+    .slice(0, rowLetters.length);
+}
+
+function machineRowSizes(machine) {
+  return normalizeRowSizes(machine?.rowSizes || rowSizesFromConfig(machine?.configuracionFilas));
+}
+
 function machineList(appState) {
   const machines = Array.isArray(appState?.machines) ? appState.machines : [];
 
@@ -37,7 +56,8 @@ function machineList(appState) {
         bankCommissionPercent: Number(machine.settings?.bankCommissionPercent ?? 3),
         fuelReminderEveryVisits: Number(machine.settings?.fuelReminderEveryVisits ?? 4),
         monthlyFloorCost: Number(machine.settings?.monthlyFloorCost ?? 0)
-      }
+      },
+      rowSizes: machineRowSizes(machine)
     }));
 }
 
@@ -50,18 +70,18 @@ function machineProductIds(appState, idMaquina, products) {
     : [];
 }
 
-function machineConfigRows() {
-  return rowSizes.map((spaces, index) => ({
+function machineConfigRows(machine) {
+  return machine.rowSizes.map((spaces, index) => ({
     fila: rowLetters[index],
     espacios: spaces
   }));
 }
 
-function defaultVisualMatrix(idMaquina) {
-  return rowSizes.flatMap((size, rowIndex) => {
+function defaultVisualMatrix(machine) {
+  return machine.rowSizes.flatMap((size, rowIndex) => {
     const fila = rowLetters[rowIndex];
     return Array.from({ length: size }, (_, index) => ({
-      idMaquina,
+      idMaquina: machine.idMaquina,
       coordenada: `${fila}${String(index + 1).padStart(2, "0")}`,
       fila,
       columna: index + 1,
@@ -78,12 +98,12 @@ function latestRecord(appState, idMaquina) {
   return [...recordsForMachine(appState, idMaquina)].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0] || null;
 }
 
-function visualMatrixFromState(appState, idMaquina) {
-  const record = latestRecord(appState, idMaquina);
+function visualMatrixFromState(appState, machine) {
+  const record = latestRecord(appState, machine.idMaquina);
   const slots = Array.isArray(record?.slotsSnapshot) ? record.slotsSnapshot : Array.isArray(record?.slots) ? record.slots : [];
   const byCode = new Map(slots.map((slot) => [slot.code, slot]));
 
-  return defaultVisualMatrix(idMaquina).map((cell) => {
+  return defaultVisualMatrix(machine).map((cell) => {
     const slot = byCode.get(cell.coordenada);
     const idProducto = productId(slot?.product);
     return {
@@ -210,7 +230,7 @@ async function syncNormalizedState(ctx, appState) {
       status: machine.status,
       deletedAt: machine.deletedAt,
       settings: machine.settings,
-      configuracionFilas: machineConfigRows(),
+      configuracionFilas: machineConfigRows(machine),
       createdAt: now,
       updatedAt: now
     }
@@ -252,7 +272,10 @@ async function syncNormalizedState(ctx, appState) {
   )));
 
   await deleteByMachine(ctx, "matriz_visual", activeMachineId);
-  await Promise.all(visualMatrixFromState(appState, activeMachineId).map((cell) => ctx.db.insert("matriz_visual", {
+  const activeMachine = machines.find((machine) => machine.idMaquina === activeMachineId);
+  if (!activeMachine) return;
+
+  await Promise.all(visualMatrixFromState(appState, activeMachine).map((cell) => ctx.db.insert("matriz_visual", {
     ...cell,
     updatedAt: now
   })));

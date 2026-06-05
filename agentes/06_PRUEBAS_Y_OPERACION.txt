@@ -175,6 +175,26 @@ Esperado:
 - Mes queda bloqueado.
 - openingStockNextMonth viene del ultimo NS.
 
+PRUEBA 7B - INFORMES Y DERECHO DE PISO
+
+Objetivo:
+Verificar que el derecho de piso mensual no se multiplica por meses vacios y que los cierres usan snapshot.
+
+Pasos:
+1. Tener una maquina con visitas reales en un mes abierto.
+2. En Configuracion, ingresar monthlyFloorCost para esa maquina.
+3. Ir a Informes.
+4. Revisar Gastos operativos del anio.
+5. Cerrar el mes usando un floorFee definido.
+6. Cambiar monthlyFloorCost en Configuracion.
+7. Volver a Informes sobre el mes cerrado.
+
+Esperado:
+- El mes abierto con records suma una sola vez monthlyFloorCost.
+- Los meses sin records no suman derecho de piso.
+- El acumulado anual no multiplica monthlyFloorCost por los 12 meses.
+- El mes cerrado conserva el floorFee guardado en el cierre aunque cambie monthlyFloorCost despues.
+
 PRUEBA 8 - CONVEX NORMALIZADO
 
 Objetivo:
@@ -200,11 +220,12 @@ Pasos:
 2. Abrir app.
 3. Confirmar que no se crea kc-01.
 4. Ir a Configuracion.
-5. Crear primera maquina desde cero.
+5. Crear primera maquina desde cero definiendo filas y espacios por fila.
 
 Esperado:
 - activeMachineId queda con el id de la nueva maquina.
 - machineProductIds de esa maquina inicia vacio.
+- rowSizes queda guardado con la estructura ingresada.
 - No hay records ni cierres.
 - La pantalla principal se habilita para esa maquina.
 
@@ -220,6 +241,7 @@ Pasos:
 
 Esperado:
 - La nueva maquina tiene relacion de productos.
+- La nueva maquina usa las filas y espacios ingresados en el formulario.
 - No tiene records.
 - No tiene cierres.
 - No tiene stock historico.

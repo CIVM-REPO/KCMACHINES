@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>KC Machines - Control de ventas</title>
-    <link rel="stylesheet" href="styles.css?v=20260601-no-slot-bars">
+    <link rel="stylesheet" href="styles.css?v=20260604-machine-layout-cache">
   </head>
   <body>
     <main class="app-shell">
@@ -206,17 +206,33 @@
               <input id="visualPreferencesInput" type="text" autocomplete="off" placeholder="Pendiente">
             </label>
             <form class="machine-create-form" id="machineCreateForm">
-              <label>
-                Nueva maquina
-                <input id="newMachineNameInput" type="text" autocomplete="off" placeholder="Nombre de maquina">
-              </label>
-              <label>
-                Heredar productos de
-                <select id="inheritMachineSelect"></select>
-              </label>
+              <div class="settings-subsection">
+                <h3>Crear nueva maquina</h3>
+                <label>
+                  Nueva maquina
+                  <input id="newMachineNameInput" type="text" autocomplete="off" placeholder="Nombre de maquina">
+                </label>
+                <label>
+                  Heredar productos de
+                  <select id="inheritMachineSelect"></select>
+                </label>
+                <div class="machine-layout-fields" id="machineLayoutFields">
+                  <label>
+                    Filas
+                    <input id="newMachineRowsInput" type="number" min="1" max="12" step="1" inputmode="numeric" placeholder="6">
+                  </label>
+                  <label>
+                    Espacios por fila
+                    <input id="newMachineSpacesInput" type="number" min="1" max="12" step="1" inputmode="numeric" placeholder="10">
+                  </label>
+                </div>
+              </div>
               <button class="save-date-button" type="submit">Crear maquina</button>
             </form>
-            <div class="machine-admin-list" id="machineAdminList"></div>
+            <div class="settings-subsection">
+              <h3>Maquinas existentes</h3>
+              <div class="machine-admin-list" id="machineAdminList"></div>
+            </div>
           </article>
 
           <article class="settings-panel">
@@ -287,6 +303,6 @@
 
     </main>
     <script src="convex-config.js?v=20260601-convex-sync"></script>
-    <script src="script.js?v=20260602-multimachine-settings"></script>
+    <script src="script.js?v=20260604-machine-layout-cache"></script>
   </body>
 </html>
