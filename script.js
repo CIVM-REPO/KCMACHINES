@@ -1,7 +1,16 @@
 const STORAGE_KEY = "kc-machines-v28-product-total";
+const SYNC_META_KEY = `${STORAGE_KEY}-sync-meta`;
+const LOCAL_BACKUPS_KEY = `${STORAGE_KEY}-local-backups`;
+const PENDING_VISIT_SYNC_KEY = `${STORAGE_KEY}-pending-visit-sync`;
+const APP_BUILD_VERSION = "20260624-fase5-block-legacy-appstate-save";
 const EMPTY_PRODUCT = "EMPTY";
 const CONVEX_URL = String(window.KC_CONVEX_URL || "").trim().replace(/\/$/, "");
+const LEGACY_APPSTATE_SAVE_ENABLED = false;
+const SYNC_RETRY_BASE_MS = 3000;
+const SYNC_RETRY_MAX_MS = 60000;
 let convexSaveTimer = null;
+let convexRetryTimer = null;
+let convexSaveInFlight = null;
 
 const defaultProducts = [
   { name: "COCA-COLA", price: 0.9, cost: 0.6 },
@@ -58,6 +67,7 @@ const defaultGlobalSettings = {
 const defaultRowSizes = [5, 5, 10, 10, 10, 10];
 const rowLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 const state = loadState();
+let syncMeta = loadSyncMeta();
 syncProductCatalog();
 let currentSlots = [];
 let currentVisitDetails = new Map();
@@ -88,6 +98,7 @@ const appMenu = document.getElementById("appMenu");
 const menuBackdrop = document.getElementById("menuBackdrop");
 const generateReport = document.getElementById("generateReport");
 const toast = document.getElementById("toast");
+const syncStatus = document.getElementById("syncStatus");
 const mainViewButton = document.getElementById("mainViewButton");
 const machineSwitcher = document.getElementById("machineSwitcher");
 const machineMenuList = document.getElementById("machineMenuList");
@@ -160,6 +171,165 @@ function loadState() {
   }
 }
 
+function loadSyncMeta() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SYNC_META_KEY)) || {};
+    return {
+      pendingUpdatedAt: Number(saved.pendingUpdatedAt || 0),
+      syncedUpdatedAt: Number(saved.syncedUpdatedAt || 0),
+      retryCount: Number(saved.retryCount || 0),
+      lastError: saved.lastError || null,
+      lastAttemptAt: Number(saved.lastAttemptAt || 0),
+      lastSyncedAt: Number(saved.lastSyncedAt || 0),
+      lastNormalizedError: saved.lastNormalizedError || null
+    };
+  } catch {
+    return {
+      pendingUpdatedAt: 0,
+      syncedUpdatedAt: 0,
+      retryCount: 0,
+      lastError: null,
+      lastAttemptAt: 0,
+      lastSyncedAt: 0,
+      lastNormalizedError: null
+    };
+  }
+}
+
+function saveSyncMeta() {
+  localStorage.setItem(SYNC_META_KEY, JSON.stringify(syncMeta));
+}
+
+function saveLocalBackup(reason) {
+  try {
+    if (!stateHasUserData(state)) return;
+    const backups = JSON.parse(localStorage.getItem(LOCAL_BACKUPS_KEY)) || [];
+    const snapshot = {
+      reason,
+      savedAt: Date.now(),
+      updatedAt: Number(state.updatedAt || 0),
+      records: Array.isArray(state.records) ? state.records.length : 0,
+      activeMachineId: state.activeMachineId || null,
+      data: state
+    };
+    const nextBackups = [snapshot, ...backups]
+      .filter((backup, index, all) => all.findIndex((item) => item.updatedAt === backup.updatedAt && item.reason === backup.reason) === index)
+      .slice(0, 30);
+    localStorage.setItem(LOCAL_BACKUPS_KEY, JSON.stringify(nextBackups));
+  } catch (error) {
+    console.warn("Local backup failed", error);
+  }
+}
+
+function hasPendingSync() {
+  if (hasPendingVisitSync()) return true;
+  if (!LEGACY_APPSTATE_SAVE_ENABLED) return false;
+  return Number(syncMeta.pendingUpdatedAt || 0) > Number(syncMeta.syncedUpdatedAt || 0);
+}
+
+function pendingVisitSyncPayload() {
+  try {
+    return JSON.parse(localStorage.getItem(PENDING_VISIT_SYNC_KEY)) || null;
+  } catch {
+    return null;
+  }
+}
+
+function hasPendingVisitSync() {
+  return Boolean(pendingVisitSyncPayload()?.visit);
+}
+
+function renderSyncStatus(options = {}) {
+  if (!syncStatus || !CONVEX_URL) return;
+  clearTimeout(renderSyncStatus.hideTimer);
+  syncStatus.title = `KC build ${APP_BUILD_VERSION}`;
+
+  if (convexSaveInFlight) {
+    syncStatus.dataset.state = "syncing";
+    syncStatus.textContent = "Sincronizando con Convex...";
+    syncStatus.hidden = false;
+    return;
+  }
+
+  if (hasPendingSync()) {
+    syncStatus.dataset.state = syncMeta.lastError ? "error" : "pending";
+    syncStatus.textContent = syncMeta.lastError
+      ? `Pendiente de sincronizar. Reintentando: ${syncMeta.lastError.slice(0, 110)}`
+      : "Cambios guardados localmente. Pendiente de sincronizar con Convex.";
+    syncStatus.hidden = false;
+    return;
+  }
+
+  if (syncMeta.lastNormalizedError) {
+    syncStatus.dataset.state = "error";
+    syncStatus.textContent = `Datos guardados. Reportes pendientes: ${syncMeta.lastNormalizedError.slice(0, 110)}`;
+    syncStatus.hidden = false;
+    return;
+  }
+
+  if (options.showSynced) {
+    syncStatus.dataset.state = "synced";
+    syncStatus.textContent = "Sincronizado con Convex";
+    syncStatus.hidden = false;
+    renderSyncStatus.hideTimer = setTimeout(() => {
+      syncStatus.hidden = true;
+    }, 1800);
+    return;
+  }
+
+  syncStatus.hidden = true;
+}
+
+function markSyncPending() {
+  syncMeta.pendingUpdatedAt = Number(state.updatedAt || Date.now());
+  syncMeta.lastError = null;
+  saveSyncMeta();
+  renderSyncStatus();
+}
+
+function markSyncConfirmed(updatedAt, result) {
+  syncMeta.syncedUpdatedAt = Math.max(Number(syncMeta.syncedUpdatedAt || 0), Number(updatedAt || 0));
+  syncMeta.retryCount = 0;
+  syncMeta.lastError = null;
+  syncMeta.lastSyncedAt = Date.now();
+  syncMeta.lastNormalizedError = result?.normalizedSynced === false
+    ? result.normalizedError || "No se pudieron actualizar las tablas de reporte"
+    : null;
+  saveSyncMeta();
+  renderSyncStatus({ showSynced: !hasPendingSync() && !syncMeta.lastNormalizedError });
+}
+
+function rememberSyncFailure(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  syncMeta.retryCount = Number(syncMeta.retryCount || 0) + 1;
+  syncMeta.lastAttemptAt = Date.now();
+  syncMeta.lastError = message;
+  saveSyncMeta();
+  renderSyncStatus();
+}
+
+function nextRetryDelay() {
+  return Math.min(SYNC_RETRY_MAX_MS, SYNC_RETRY_BASE_MS * (2 ** Math.min(syncMeta.retryCount, 5)));
+}
+
+function scheduleConvexRetry() {
+  if (!CONVEX_URL || !hasPendingSync()) return;
+  clearTimeout(convexRetryTimer);
+  convexRetryTimer = setTimeout(() => {
+    flushPendingSync();
+  }, nextRetryDelay());
+}
+
+async function requestPersistentStorage() {
+  if (!navigator.storage?.persisted || !navigator.storage?.persist) return;
+  try {
+    const alreadyPersistent = await navigator.storage.persisted();
+    if (!alreadyPersistent) await navigator.storage.persist();
+  } catch (error) {
+    console.warn("Persistent storage request failed", error);
+  }
+}
+
 function stateHasUserData(appState) {
   return Boolean(
     appState.records?.length
@@ -187,6 +357,7 @@ function shouldKeepLocalState(remoteState) {
 
 function applyRemoteState(remoteState) {
   const normalized = normalizeState(remoteState);
+  saveLocalBackup("before-remote-apply");
   Object.keys(state).forEach((key) => delete state[key]);
   Object.assign(state, normalized);
   syncProductCatalog();
@@ -212,9 +383,19 @@ async function convexRequest(type, path, args) {
     })
   });
 
-  if (!response.ok) throw new Error(`Convex HTTP ${response.status}`);
+  const responseText = await response.text();
+  let payload = null;
+  try {
+    payload = responseText ? JSON.parse(responseText) : null;
+  } catch {
+    payload = null;
+  }
 
-  const payload = await response.json();
+  if (!response.ok) {
+    const detail = payload?.errorMessage || responseText || response.statusText;
+    throw new Error(`Convex HTTP ${response.status}: ${detail}`);
+  }
+
   if (payload.status === "error") {
     throw new Error(payload.errorMessage || "Convex request failed");
   }
@@ -222,31 +403,190 @@ async function convexRequest(type, path, args) {
   return payload.value;
 }
 
+function normalizedRowSizesFromMachine(machine) {
+  return normalizeRowSizes(rowSizesFromConfig(machine?.configuracionFilas) || machine?.rowSizes);
+}
+
+function normalizedBootstrapProducts(bootstrap) {
+  const productsById = new Map((bootstrap?.productos || []).map((product) => [normalizeProductName(product.idProducto || product.nombreProducto), product]));
+  const orderedIds = [...(bootstrap?.maquinaProductos || [])]
+    .filter((item) => item?.activoEnMaquina !== false)
+    .sort((a, b) => Number(a.ordenContable ?? 0) - Number(b.ordenContable ?? 0))
+    .map((item) => normalizeProductName(item.idProducto))
+    .filter(Boolean);
+  const ids = [...new Set([...orderedIds, ...productsById.keys()])];
+
+  return ids
+    .map((id) => {
+      const product = productsById.get(id);
+      return {
+        name: id,
+        price: Number(product?.precio ?? product?.price ?? 0),
+        cost: Number(product?.costo ?? product?.cost ?? 0)
+      };
+    })
+    .filter((product) => product.name);
+}
+
+function normalizedBootstrapMachineProductIds(bootstrap, machines, normalizedProducts) {
+  const fallbackIds = normalizedProducts.map((product) => product.name);
+  const byMachine = {};
+
+  machines.forEach((machine) => {
+    const ids = [...(bootstrap?.maquinaProductos || [])]
+      .filter((item) => item.idMaquina === machine.id && item.activoEnMaquina !== false)
+      .sort((a, b) => Number(a.ordenContable ?? 0) - Number(b.ordenContable ?? 0))
+      .map((item) => normalizeProductName(item.idProducto))
+      .filter(Boolean);
+    byMachine[machine.id] = ids.length ? [...new Set(ids)] : fallbackIds.slice();
+  });
+
+  return byMachine;
+}
+
+function normalizedBootstrapVisualLayout(bootstrap, machine, rowSizes) {
+  const layout = {};
+  (bootstrap?.matrizVisual || [])
+    .filter((cell) => cell.idMaquina === machine.idMaquina)
+    .forEach((cell) => {
+      layout[cell.coordenada] = normalizeProductName(cell.idProducto) || EMPTY_PRODUCT;
+    });
+  return normalizeVisualLayout(layout, rowSizes);
+}
+
+function normalizedVisitDetail(detail) {
+  const productName = normalizeProductName(detail.idProducto || detail.nombreProducto || detail.product);
+  return {
+    product: productName,
+    stockAnterior: Number(detail.stockAnterior || 0),
+    representative: detail.representante || detail.representative || "SR",
+    SM: Number(detail.SM || 0),
+    NS: Number(detail.NS || 0),
+    UV: Number(detail.UV || 0),
+    status: detail.estadoValidacion || detail.status || "ok",
+    note: detail.notaValidacion || detail.note || "",
+    captured: true,
+    price: Number(detail.precio ?? detail.price ?? productCatalogItem(productName)?.price ?? 0),
+    cost: Number(detail.costo ?? detail.cost ?? productCatalogItem(productName)?.cost ?? 0)
+  };
+}
+
+function remoteUpdatedAtFromBootstrap(bootstrap, visitsByMachine) {
+  const appStateUpdatedAt = (bootstrap?.metadata?.appState || [])
+    .map((row) => Number(row.updatedAt || 0));
+  const entityUpdatedAt = [
+    ...(bootstrap?.maquinas || []),
+    ...(bootstrap?.productos || []),
+    ...(bootstrap?.maquinaProductos || []),
+    ...(bootstrap?.matrizVisual || []),
+    ...Object.values(visitsByMachine || {}).flat()
+  ].flatMap((item) => [Number(item.updatedAt || 0), Number(item.closedAt || 0), Number(item.createdAt || 0)]);
+
+  return Math.max(0, ...appStateUpdatedAt, ...entityUpdatedAt);
+}
+
+async function loadNormalizedStateFromConvex() {
+  const bootstrap = await convexRequest("query", "appState:getBootstrap", {});
+  if (!bootstrap?.maquinas?.length) return null;
+
+  const normalizedProducts = normalizedBootstrapProducts(bootstrap);
+  const machines = (bootstrap.maquinas || [])
+    .filter((machine) => machine.status !== "inactive" && !machine.deletedAt)
+    .map((machine, index) => {
+      const rowSizes = normalizedRowSizesFromMachine(machine);
+      return {
+        id: String(machine.idMaquina || `machine-${index + 1}`),
+        name: String(machine.nombreMaquina || `Maquina ${index + 1}`),
+        status: String(machine.status || "active"),
+        deletedAt: machine.deletedAt || null,
+        settings: normalizeMachineSettings(machine.settings || {}),
+        rowSizes,
+        visualLayout: normalizedBootstrapVisualLayout(bootstrap, machine, rowSizes)
+      };
+    });
+  const activeMachineId = machines.find((machine) => machine.status === "active")?.id || machines[0]?.id || null;
+  const visitsByMachine = {};
+  const detailLists = await Promise.all(machines.map(async (machine) => {
+    const visits = await convexRequest("query", "appState:listVisitsByMachine", { idMaquina: machine.id });
+    visitsByMachine[machine.id] = visits || [];
+    const records = await Promise.all((visits || []).map(async (visit) => {
+      const details = await convexRequest("query", "appState:getVisitDetails", { idVisita: visit.idVisita });
+      return {
+        machineId: visit.idMaquina,
+        date: visit.fecha,
+        type: visit.tipo || "visita_real",
+        status: visit.estado || "closed",
+        fuelCost: Number(visit.fuelCost || 0),
+        createdAt: Number(visit.createdAt || 0),
+        closedAt: Number(visit.closedAt || 0),
+        catalogSnapshot: catalogSnapshot(normalizedProducts),
+        visitDetails: (details || []).map(normalizedVisitDetail).filter((detail) => detail.product && !isEmptyProduct(detail.product))
+      };
+    }));
+    return records;
+  }));
+
+  return normalizeState({
+    records: detailLists.flat().sort((a, b) => String(a.date).localeCompare(String(b.date))),
+    monthClosures: [],
+    yearClosures: [],
+    machines,
+    activeMachineId,
+    globalSettings: defaultGlobalSettings,
+    machineProductIds: normalizedBootstrapMachineProductIds(bootstrap, machines, normalizedProducts),
+    products: normalizedProducts,
+    updatedAt: remoteUpdatedAtFromBootstrap(bootstrap, visitsByMachine)
+  });
+}
+
+async function loadLegacyStateFromConvex() {
+  return await convexRequest("query", "appState:get", { key: STORAGE_KEY });
+}
+
 async function loadStateFromConvex() {
   if (!CONVEX_URL) return;
 
   try {
-    const remoteState = await convexRequest("query", "appState:get", { key: STORAGE_KEY });
+    let remoteState = null;
+    try {
+      remoteState = await loadNormalizedStateFromConvex();
+    } catch (bootstrapError) {
+      console.warn("Convex normalized bootstrap failed, falling back to appState:get", bootstrapError);
+      remoteState = await loadLegacyStateFromConvex();
+    }
+
     if (!remoteState) {
       if (stateHasUserData(state)) {
-        await saveStateToConvex();
-        showToast("Datos locales subidos a Convex");
+        console.info("Legacy appState upload skipped; normalized entity mutations are required for remote writes.");
+        showToast("Datos locales conservados; appState legacy no se subio");
       }
       return;
     }
 
     if (shouldKeepLocalState(remoteState)) {
-      await saveStateToConvex();
-      showToast("Datos locales sincronizados con Convex");
+      console.info("Legacy appState upload skipped for newer local state.");
+      showToast("Datos locales conservados; appState legacy no se subio");
       return;
     }
 
     applyRemoteState(remoteState);
+    syncMeta.pendingUpdatedAt = Number(state.updatedAt || 0);
+    syncMeta.syncedUpdatedAt = Number(state.updatedAt || 0);
+    syncMeta.retryCount = 0;
+    syncMeta.lastError = null;
+    syncMeta.lastNormalizedError = null;
+    saveSyncMeta();
+    renderSyncStatus();
     loadDate(visitDate.value);
     showToast("Datos sincronizados con Convex");
   } catch (error) {
     console.warn("Convex sync failed", error);
-    showToast("Convex no disponible, usando datos locales");
+    const message = error instanceof Error ? error.message : String(error);
+    syncMeta.lastError = message;
+    saveSyncMeta();
+    renderSyncStatus();
+    showToast(`Convex no sincronizo: ${message.slice(0, 80)}`);
+    scheduleConvexRetry();
   }
 }
 
@@ -254,19 +594,146 @@ function saveStateToConvex() {
   if (!CONVEX_URL) return Promise.resolve();
   return convexRequest("mutation", "appState:save", {
     key: STORAGE_KEY,
-    data: state
+    data: compactStateForStorage(state)
   });
 }
 
-function queueConvexSave() {
+function visualLayoutForVisitSync(record) {
+  return (record?.slotsSnapshot || record?.slots || []).reduce((layout, slot) => {
+    if (!slot?.code) return layout;
+    layout[slot.code] = isEmptyProduct(slot.product) ? EMPTY_PRODUCT : slot.product;
+    return layout;
+  }, {});
+}
+
+function buildVisitSyncPayload(record) {
+  const now = Date.now();
+  const idMaquina = String(record?.machineId || activeMachine()?.id || "");
+  const fecha = String(record?.date || "");
+
+  return {
+    updatedAt: Number(state.updatedAt || now),
+    visit: {
+      idVisita: `${idMaquina}:${fecha}`,
+      idMaquina,
+      fecha,
+      tipo: String(record?.type || "visita_real"),
+      estado: String(record?.status || "closed"),
+      fuelCost: Number(record?.fuelCost || 0),
+      createdAt: Number(record?.createdAt || now),
+      closedAt: Number(record?.closedAt || now),
+      visitDetails: recordVisitDetails(record),
+      visualLayout: visualLayoutForVisitSync(record)
+    }
+  };
+}
+
+function saveVisitToConvex(payload) {
+  if (!CONVEX_URL || !payload?.visit) return Promise.resolve();
+  return convexRequest("mutation", "appState:saveVisit", payload.visit);
+}
+
+function flushVisitSync() {
+  const payload = pendingVisitSyncPayload();
+  if (!CONVEX_URL || !payload?.visit) {
+    renderSyncStatus();
+    return Promise.resolve();
+  }
+  if (convexSaveInFlight) return convexSaveInFlight;
+
+  clearTimeout(convexSaveTimer);
+  clearTimeout(convexRetryTimer);
+  syncMeta.lastAttemptAt = Date.now();
+  saveSyncMeta();
+  renderSyncStatus();
+
+  convexSaveInFlight = saveVisitToConvex(payload)
+    .then((result) => {
+      localStorage.removeItem(PENDING_VISIT_SYNC_KEY);
+      markSyncConfirmed(payload.updatedAt, { normalizedSynced: true });
+      return result;
+    })
+    .catch((error) => {
+      console.warn("Convex visit save failed", error);
+      rememberSyncFailure(error);
+      scheduleConvexRetry();
+      throw error;
+    })
+    .finally(() => {
+      convexSaveInFlight = null;
+      renderSyncStatus();
+    });
+
+  return convexSaveInFlight;
+}
+
+function flushConvexSave() {
+  if (!LEGACY_APPSTATE_SAVE_ENABLED) {
+    renderSyncStatus();
+    return Promise.resolve({ legacyAppStateSkipped: true });
+  }
+  if (!CONVEX_URL || !hasPendingSync()) {
+    renderSyncStatus();
+    return Promise.resolve();
+  }
+  if (convexSaveInFlight) return convexSaveInFlight;
+
+  clearTimeout(convexSaveTimer);
+  clearTimeout(convexRetryTimer);
+  const snapshotUpdatedAt = Number(state.updatedAt || 0);
+  syncMeta.lastAttemptAt = Date.now();
+  saveSyncMeta();
+  renderSyncStatus();
+
+  convexSaveInFlight = saveStateToConvex()
+    .then((result) => {
+      markSyncConfirmed(snapshotUpdatedAt, result);
+      if (hasPendingSync()) queueConvexSave(0);
+      return result;
+    })
+    .catch((error) => {
+      console.warn("Convex save failed", error);
+      rememberSyncFailure(error);
+      scheduleConvexRetry();
+      throw error;
+    })
+    .finally(() => {
+      convexSaveInFlight = null;
+      renderSyncStatus();
+    });
+
+  return convexSaveInFlight;
+}
+
+function flushPendingSync() {
+  if (hasPendingVisitSync()) return flushVisitSync();
+  if (LEGACY_APPSTATE_SAVE_ENABLED) return flushConvexSave();
+  renderSyncStatus();
+  return Promise.resolve({ legacyAppStateSkipped: true });
+}
+
+function queueVisitSave(record, delay = 400) {
+  if (!CONVEX_URL) return;
+  const payload = buildVisitSyncPayload(record);
+  if (!payload.visit.idMaquina || !payload.visit.fecha) return;
+  localStorage.setItem(PENDING_VISIT_SYNC_KEY, JSON.stringify(payload));
+  markSyncPending();
+  clearTimeout(convexSaveTimer);
+  convexSaveTimer = setTimeout(() => {
+    flushVisitSync().catch(() => {});
+  }, delay);
+}
+
+function queueConvexSave(delay = 400) {
+  if (!LEGACY_APPSTATE_SAVE_ENABLED) {
+    renderSyncStatus();
+    return;
+  }
   if (!CONVEX_URL) return;
   clearTimeout(convexSaveTimer);
   convexSaveTimer = setTimeout(() => {
-    saveStateToConvex().catch((error) => {
-      console.warn("Convex save failed", error);
-      showToast("No se pudo sincronizar con Convex");
-    });
-  }, 400);
+    flushConvexSave().catch(() => {});
+  }, delay);
 }
 
 function normalizeMachineSettings(settings = {}) {
@@ -853,6 +1320,17 @@ function currentVisitDetailsList() {
 }
 
 function applyVisitDetailsToSlots() {
+  currentVisitDetails.forEach((detail) => {
+    if (!detail?.representative || detail.representative === "SR") return;
+    const representativeSlot = findSlot(detail.representative);
+    if (!representativeSlot) return;
+    representativeSlot.product = detail.product;
+    representativeSlot.previousProduct = detail.product;
+    representativeSlot.color = productColor(detail.product);
+    representativeSlot.currentPrice = Number(detail.price ?? productCatalogItem(detail.product)?.price ?? 0);
+    representativeSlot.currentCost = Number(detail.cost ?? productCatalogItem(detail.product)?.cost ?? 0);
+  });
+
   currentSlots.forEach((slot) => {
     if (isEmptyProduct(slot.product)) {
       slot.previousProduct = EMPTY_PRODUCT;
@@ -868,7 +1346,9 @@ function applyVisitDetailsToSlots() {
     }
 
     const detail = currentVisitDetails.get(slot.product);
-    const representative = representativeMapForSlots(currentSlots).get(slot.product);
+    const representative = detail?.representative && detail.representative !== "SR"
+      ? detail.representative
+      : representativeMapForSlots(currentSlots).get(slot.product);
     const isRepresentative = representative === slot.code;
     slot.previousProduct = slot.product;
     slot.previousStock = Number(detail?.stockAnterior || 0);
@@ -912,6 +1392,43 @@ function buildNextStockFromDetails(details) {
 
 function cloneRecord(record) {
   return JSON.parse(JSON.stringify(record));
+}
+
+function compactRecordForStorage(record) {
+  const slotsSnapshot = Array.isArray(record?.slotsSnapshot)
+    ? record.slotsSnapshot
+    : Array.isArray(record?.slots)
+      ? record.slots
+      : [];
+  const hasVisitDetails = Array.isArray(record?.visitDetails) && record.visitDetails.length;
+  const compact = {
+    ...record
+  };
+
+  if (hasVisitDetails) {
+    delete compact.slotsSnapshot;
+    delete compact.catalogSnapshot;
+  } else {
+    compact.slotsSnapshot = slotsSnapshot;
+  }
+  delete compact.slots;
+  delete compact.salesMovements;
+  delete compact.nextStock;
+  return compact;
+}
+
+function compactStateForStorage(appState) {
+  return {
+    ...appState,
+    records: (appState.records || []).map(compactRecordForStorage),
+    monthClosures: (appState.monthClosures || []).map((closure) => ({ ...closure })),
+    yearClosures: (appState.yearClosures || []).map((closure) => ({ ...closure })),
+    machines: (appState.machines || []).map((machine) => ({ ...machine })),
+    products: (appState.products || []).map((product) => ({ ...product })),
+    pendingProducts: Array.isArray(appState.pendingProducts)
+      ? appState.pendingProducts.map((product) => ({ ...product }))
+      : appState.pendingProducts
+  };
 }
 
 function detailHasDependentData(detail) {
@@ -966,11 +1483,8 @@ function rebuildRecordFromDetails(record, details, type = record.type) {
   return {
     ...record,
     type,
-    slots: slotsSnapshot,
     slotsSnapshot,
-    visitDetails: recalculatedDetails,
-    salesMovements: type === "carga_inicial" ? [] : buildSalesMovementsFromDetails(recalculatedDetails),
-    nextStock: buildNextStockFromDetails(recalculatedDetails)
+    visitDetails: recalculatedDetails
   };
 }
 
@@ -1099,12 +1613,18 @@ function buildVisitRecord(date, previousStock, visitIndex) {
   return { date, slots };
 }
 
-function saveState() {
-  state.records.sort((a, b) => a.date.localeCompare(b.date));
+function saveState(options = {}) {
+  const syncRemote = options.syncRemote === true && LEGACY_APPSTATE_SAVE_ENABLED;
+  state.records = state.records.map(compactRecordForStorage).sort((a, b) => a.date.localeCompare(b.date));
   state.products = products;
   state.updatedAt = Date.now();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  queueConvexSave();
+  saveLocalBackup("before-local-save");
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(compactStateForStorage(state)));
+  saveLocalBackup("after-local-save");
+  if (syncRemote) {
+    markSyncPending();
+    queueConvexSave();
+  }
 }
 
 function resetStateData() {
@@ -3452,11 +3972,8 @@ function currentRecord() {
     status: "closed",
     fuelCost: Number(fuelInput.value || 0),
     catalogSnapshot: catalogForRecord(existing),
-    slots: slotsSnapshot,
     slotsSnapshot,
-    visitDetails: details,
-    salesMovements: isInitialLoad ? [] : buildSalesMovementsFromDetails(details),
-    nextStock: buildNextStockFromDetails(details)
+    visitDetails: details
   };
 }
 
@@ -3535,10 +4052,11 @@ function saveSelectedDate() {
 
   syncActiveMachineVisualLayout();
   state.records = chainResult.records;
-  saveState();
+  saveState({ syncRemote: false });
+  queueVisitSave(record);
   loadDate(record.date);
-  if (isUpdate) showToast("Datos actualizados");
-  else showToast("Datos guardados");
+  if (isUpdate) showToast("Datos actualizados localmente; sincronizando");
+  else showToast("Datos guardados localmente; sincronizando");
 }
 
 function showToast(message) {
@@ -3549,6 +4067,40 @@ function showToast(message) {
     toast.hidden = true;
   }, 2200);
 }
+
+window.KC_RECOVERY = {
+  build: APP_BUILD_VERSION,
+  listBackups() {
+    try {
+      return (JSON.parse(localStorage.getItem(LOCAL_BACKUPS_KEY)) || []).map((backup, index) => ({
+        index,
+        reason: backup.reason,
+        savedAt: new Date(Number(backup.savedAt || 0)).toISOString(),
+        updatedAt: backup.updatedAt,
+        records: backup.records,
+        activeMachineId: backup.activeMachineId
+      }));
+    } catch {
+      return [];
+    }
+  },
+  restoreBackup(index = 0) {
+    const backups = JSON.parse(localStorage.getItem(LOCAL_BACKUPS_KEY)) || [];
+    const backup = backups[index];
+    if (!backup?.data) throw new Error("Backup no encontrado");
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(backup.data));
+    localStorage.setItem(SYNC_META_KEY, JSON.stringify({
+      pendingUpdatedAt: Number(backup.data.updatedAt || Date.now()),
+      syncedUpdatedAt: 0,
+      retryCount: 0,
+      lastError: null,
+      lastAttemptAt: 0,
+      lastSyncedAt: 0,
+      lastNormalizedError: null
+    }));
+    window.location.reload();
+  }
+};
 
 [foundInput, leftInput].forEach((input) => {
   input.addEventListener("input", updateDialogResult);
@@ -3589,6 +4141,20 @@ saveSettingsButton.addEventListener("click", saveSettings);
 resetMachineButton.addEventListener("click", resetActiveMachineData);
 exportMachineButton.addEventListener("click", exportActiveMachine);
 importMachineButton.addEventListener("click", importActiveMachine);
+window.addEventListener("online", () => {
+  if (hasPendingSync()) flushPendingSync().catch(() => {});
+});
+window.addEventListener("focus", () => {
+  if (hasPendingSync()) flushPendingSync().catch(() => {});
+});
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && hasPendingSync()) flushPendingSync().catch(() => {});
+});
+window.addEventListener("beforeunload", (event) => {
+  if (!hasPendingSync() && !convexSaveInFlight) return;
+  event.preventDefault();
+  event.returnValue = "Hay cambios guardados localmente que todavia no se sincronizan con Convex.";
+});
 function openVisitDatePicker() {
   try {
     if (typeof visitDate.showPicker === "function") {
@@ -3606,5 +4172,12 @@ visitDate.addEventListener("click", openVisitDatePicker);
 visitDate.addEventListener("change", () => loadDate(visitDate.value));
 
 visitDate.value = todayValue();
+console.info(`KC Machines build ${APP_BUILD_VERSION}`);
+requestPersistentStorage();
+renderSyncStatus();
+if (hasPendingSync()) {
+  if (hasPendingVisitSync()) flushVisitSync().catch(() => {});
+  else queueConvexSave(0);
+}
 loadDate(visitDate.value);
 loadStateFromConvex();

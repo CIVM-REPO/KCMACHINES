@@ -4,6 +4,7 @@ import { mutation, query } from "./_generated/server";
 const EMPTY_PRODUCT = "EMPTY";
 const defaultRowSizes = [5, 5, 10, 10, 10, 10];
 const rowLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+const MAX_LEGACY_APPSTATE_BYTES = 700_000;
 
 function productId(productName) {
   return String(productName || "").trim().toUpperCase();
@@ -21,6 +22,33 @@ function normalizedProducts(appState) {
       costo: Number(product.cost ?? product.costo ?? 0)
     }))
     .filter((product) => product.idProducto && !seen.has(product.idProducto) && seen.add(product.idProducto));
+}
+
+function jsonByteSize(value) {
+  return JSON.stringify(value).length;
+}
+
+function compactLegacyRecord(record) {
+  const compact = { ...(record || {}) };
+  const hasVisitDetails = Array.isArray(compact.visitDetails) && compact.visitDetails.length;
+
+  if (hasVisitDetails) {
+    delete compact.slotsSnapshot;
+    delete compact.catalogSnapshot;
+  }
+  delete compact.slots;
+  delete compact.salesMovements;
+  delete compact.nextStock;
+
+  return compact;
+}
+
+function compactLegacyAppState(appState) {
+  if (!appState || typeof appState !== "object") return appState;
+  return {
+    ...appState,
+    records: Array.isArray(appState.records) ? appState.records.map(compactLegacyRecord) : appState.records
+  };
 }
 
 function rowSizesFromConfig(configRows) {
@@ -196,6 +224,51 @@ function visitDetailsForRecord(record, productsById) {
     });
 }
 
+function normalizedVisitDetails(details) {
+  return (Array.isArray(details) ? details : [])
+    .map((detail) => {
+      const idProducto = productId(detail?.idProducto || detail?.product || detail?.nombreProducto);
+      return {
+        idProducto,
+        nombreProducto: productId(detail?.nombreProducto || detail?.product || detail?.idProducto),
+        stockAnterior: Number(detail?.stockAnterior || 0),
+        representante: String(detail?.representante || detail?.representative || "SR"),
+        SM: Number(detail?.SM || 0),
+        NS: Number(detail?.NS || 0),
+        UV: Number(detail?.UV || 0),
+        estadoValidacion: String(detail?.estadoValidacion || detail?.status || "ok"),
+        notaValidacion: String(detail?.notaValidacion || detail?.note || ""),
+        precio: Number(detail?.precio ?? detail?.price ?? 0),
+        costo: Number(detail?.costo ?? detail?.cost ?? 0)
+      };
+    })
+    .filter((detail) => detail.idProducto && detail.idProducto !== EMPTY_PRODUCT);
+}
+
+function matrixEntriesFromArgs(args) {
+  const source = Array.isArray(args.matriz)
+    ? args.matriz
+    : Array.isArray(args.visualLayout)
+      ? args.visualLayout
+      : args.visualLayout && typeof args.visualLayout === "object"
+        ? Object.entries(args.visualLayout).map(([coordenada, idProducto]) => ({ coordenada, idProducto }))
+        : [];
+
+  return source
+    .map((entry) => {
+      const coordenada = String(entry?.coordenada || entry?.code || "").trim().toUpperCase();
+      const match = coordenada.match(/^([A-Z]+)(\d+)$/);
+      const idProducto = productId(entry?.idProducto || entry?.product || entry?.nombreProducto);
+      return {
+        coordenada,
+        fila: String(entry?.fila || match?.[1] || "").toUpperCase(),
+        columna: Number(entry?.columna ?? match?.[2] ?? 0),
+        idProducto: idProducto && idProducto !== EMPTY_PRODUCT ? idProducto : null
+      };
+    })
+    .filter((entry) => entry.coordenada && entry.fila && entry.columna > 0);
+}
+
 async function upsertByIndex(ctx, table, indexName, indexBuilder, patch) {
   const existing = await ctx.db.query(table).withIndex(indexName, indexBuilder).unique();
   if (existing) {
@@ -210,11 +283,99 @@ async function deleteByMachine(ctx, table, idMaquina) {
   await Promise.all(rows.map((row) => ctx.db.delete(row._id)));
 }
 
+async function deleteVisitBundle(ctx, idVisita) {
+  const details = await ctx.db.query("detalle_visita").withIndex("by_visita", (q) => q.eq("idVisita", idVisita)).collect();
+  await Promise.all(details.map((detail) => ctx.db.delete(detail._id)));
+}
+
 async function deleteMachineBundle(ctx, idMaquina) {
   await deleteByMachine(ctx, "maquina_productos", idMaquina);
   await deleteByMachine(ctx, "matriz_visual", idMaquina);
-  await deleteByMachine(ctx, "detalle_visita", idMaquina);
-  await deleteByMachine(ctx, "visitas", idMaquina);
+  const visits = await ctx.db.query("visitas").withIndex("by_maquina", (q) => q.eq("idMaquina", idMaquina)).collect();
+  for (const visit of visits) {
+    await deleteVisitBundle(ctx, visit.idVisita);
+    await ctx.db.delete(visit._id);
+  }
+}
+
+async function syncVisitDetails(ctx, idVisita, idMaquina, details, now) {
+  const existingDetails = await ctx.db.query("detalle_visita").withIndex("by_visita", (q) => q.eq("idVisita", idVisita)).collect();
+  const nextIds = new Set(details.map((detail) => `${idVisita}:${detail.idProducto}`));
+
+  await Promise.all(existingDetails
+    .filter((detail) => !nextIds.has(detail.idDetalleVisita))
+    .map((detail) => ctx.db.delete(detail._id)));
+
+  const existingById = new Map(existingDetails.map((detail) => [detail.idDetalleVisita, detail]));
+  for (const detail of details) {
+    const idDetalleVisita = `${idVisita}:${detail.idProducto}`;
+    const patch = {
+      idDetalleVisita,
+      idVisita,
+      idMaquina,
+      ...detail,
+      createdAt: now
+    };
+    const existing = existingById.get(idDetalleVisita);
+    if (existing) {
+      await ctx.db.patch(existing._id, patch);
+    } else {
+      await ctx.db.insert("detalle_visita", patch);
+    }
+  }
+}
+
+async function syncVisualMatrixPatch(ctx, idMaquina, entries, now) {
+  for (const entry of entries) {
+    await upsertByIndex(
+      ctx,
+      "matriz_visual",
+      "by_maquina_coordenada",
+      (q) => q.eq("idMaquina", idMaquina).eq("coordenada", entry.coordenada),
+      {
+        idMaquina,
+        ...entry,
+        updatedAt: now
+      }
+    );
+  }
+}
+
+async function syncVisitsForMachine(ctx, appState, activeMachineId, productsById, now) {
+  const records = recordsForMachine(appState, activeMachineId);
+  const nextVisitIds = new Set(records.map((record) => `${activeMachineId}:${record.date}`));
+  const existingVisits = await ctx.db.query("visitas").withIndex("by_maquina", (q) => q.eq("idMaquina", activeMachineId)).collect();
+
+  for (const visit of existingVisits.filter((visit) => !nextVisitIds.has(visit.idVisita))) {
+    await deleteVisitBundle(ctx, visit.idVisita);
+    await ctx.db.delete(visit._id);
+  }
+
+  for (const record of records) {
+    const idVisita = `${activeMachineId}:${record.date}`;
+    const patch = {
+      idVisita,
+      idMaquina: activeMachineId,
+      fecha: String(record.date || ""),
+      tipo: String(record.type || "visita_real"),
+      estado: String(record.status || "closed"),
+      fuelCost: Number(record.fuelCost || 0),
+      createdAt: Number(record.createdAt || now),
+      closedAt: Number(record.closedAt || now)
+    };
+    const existing = await ctx.db
+      .query("visitas")
+      .withIndex("by_idVisita", (q) => q.eq("idVisita", idVisita))
+      .unique();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, patch);
+    } else {
+      await ctx.db.insert("visitas", patch);
+    }
+
+    await syncVisitDetails(ctx, idVisita, activeMachineId, visitDetailsForRecord(record, productsById), now);
+  }
 }
 
 async function syncNormalizedState(ctx, appState) {
@@ -295,30 +456,7 @@ async function syncNormalizedState(ctx, appState) {
 
   if (!activeMachineId) return;
 
-  await deleteByMachine(ctx, "detalle_visita", activeMachineId);
-  await deleteByMachine(ctx, "visitas", activeMachineId);
-  for (const record of recordsForMachine(appState, activeMachineId)) {
-    const idVisita = `${activeMachineId}:${record.date}`;
-    await ctx.db.insert("visitas", {
-      idVisita,
-      idMaquina: activeMachineId,
-      fecha: String(record.date || ""),
-      tipo: String(record.type || "visita_real"),
-      estado: String(record.status || "closed"),
-      fuelCost: Number(record.fuelCost || 0),
-      createdAt: Number(record.createdAt || now),
-      closedAt: Number(record.closedAt || now)
-    });
-
-    const details = visitDetailsForRecord(record, productsById);
-    await Promise.all(details.map((detail) => ctx.db.insert("detalle_visita", {
-      idDetalleVisita: `${idVisita}:${detail.idProducto}`,
-      idVisita,
-      idMaquina: activeMachineId,
-      ...detail,
-      createdAt: now
-    })));
-  }
+  await syncVisitsForMachine(ctx, appState, activeMachineId, productsById, now);
 }
 
 export const get = query({
@@ -347,30 +485,168 @@ export const normalizedCounts = query({
   })
 });
 
+export const getBootstrap = query({
+  args: {},
+  handler: async (ctx) => {
+    const appStateRows = await ctx.db.query("appState").collect();
+    return {
+      maquinas: await ctx.db.query("maquinas").collect(),
+      productos: await ctx.db.query("productos").collect(),
+      maquinaProductos: await ctx.db.query("maquina_productos").collect(),
+      matrizVisual: await ctx.db.query("matriz_visual").collect(),
+      metadata: {
+        appState: appStateRows.map((row) => ({
+          key: row.key,
+          updatedAt: row.updatedAt
+        })),
+        counts: {
+          maquinas: (await ctx.db.query("maquinas").collect()).length,
+          productos: (await ctx.db.query("productos").collect()).length,
+          maquinaProductos: (await ctx.db.query("maquina_productos").collect()).length,
+          matrizVisual: (await ctx.db.query("matriz_visual").collect()).length,
+          visitas: (await ctx.db.query("visitas").collect()).length,
+          detalleVisita: (await ctx.db.query("detalle_visita").collect()).length
+        }
+      }
+    };
+  }
+});
+
+export const listVisitsByMachine = query({
+  args: {
+    idMaquina: v.string(),
+    fromDate: v.optional(v.string()),
+    toDate: v.optional(v.string())
+  },
+  handler: async (ctx, args) => {
+    const visits = await ctx.db.query("visitas").withIndex("by_maquina", (q) => q.eq("idMaquina", args.idMaquina)).collect();
+    return visits
+      .filter((visit) => !args.fromDate || visit.fecha >= args.fromDate)
+      .filter((visit) => !args.toDate || visit.fecha <= args.toDate)
+      .sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
+  }
+});
+
+export const getVisitDetails = query({
+  args: {
+    idVisita: v.string()
+  },
+  handler: async (ctx, args) => {
+    const details = await ctx.db.query("detalle_visita").withIndex("by_visita", (q) => q.eq("idVisita", args.idVisita)).collect();
+    return details.sort((a, b) => String(a.nombreProducto).localeCompare(String(b.nombreProducto)));
+  }
+});
+
+export const getLatestVisitBefore = query({
+  args: {
+    idMaquina: v.string(),
+    beforeDate: v.string()
+  },
+  handler: async (ctx, args) => {
+    const visits = await ctx.db.query("visitas").withIndex("by_maquina", (q) => q.eq("idMaquina", args.idMaquina)).collect();
+    const latest = visits
+      .filter((visit) => visit.fecha < args.beforeDate)
+      .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)))[0] || null;
+    if (!latest) return null;
+    const details = await ctx.db.query("detalle_visita").withIndex("by_visita", (q) => q.eq("idVisita", latest.idVisita)).collect();
+    return {
+      visit: latest,
+      details
+    };
+  }
+});
+
+export const saveVisit = mutation({
+  args: {
+    idVisita: v.optional(v.string()),
+    idMaquina: v.string(),
+    fecha: v.string(),
+    tipo: v.string(),
+    estado: v.string(),
+    fuelCost: v.number(),
+    createdAt: v.optional(v.number()),
+    closedAt: v.optional(v.number()),
+    visitDetails: v.array(v.any()),
+    visualLayout: v.optional(v.any()),
+    matriz: v.optional(v.any())
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const idVisita = String(args.idVisita || `${args.idMaquina}:${args.fecha}`);
+    const patch = {
+      idVisita,
+      idMaquina: args.idMaquina,
+      fecha: args.fecha,
+      tipo: args.tipo,
+      estado: args.estado,
+      fuelCost: Number(args.fuelCost || 0),
+      createdAt: Number(args.createdAt || now),
+      closedAt: Number(args.closedAt || now)
+    };
+
+    await upsertByIndex(
+      ctx,
+      "visitas",
+      "by_idVisita",
+      (q) => q.eq("idVisita", idVisita),
+      patch
+    );
+    await syncVisitDetails(ctx, idVisita, args.idMaquina, normalizedVisitDetails(args.visitDetails), now);
+    await syncVisualMatrixPatch(ctx, args.idMaquina, matrixEntriesFromArgs(args), now);
+
+    return {
+      idVisita,
+      details: normalizedVisitDetails(args.visitDetails).length,
+      matrixUpdated: matrixEntriesFromArgs(args).length
+    };
+  }
+});
+
 export const save = mutation({
   args: {
     key: v.string(),
     data: v.any()
   },
   handler: async (ctx, args) => {
+    const data = compactLegacyAppState(args.data);
+    const dataBytes = jsonByteSize(data);
     const existing = await ctx.db
       .query("appState")
       .withIndex("by_key", (q) => q.eq("key", args.key))
       .unique();
+
+    if (dataBytes > MAX_LEGACY_APPSTATE_BYTES) {
+      return {
+        id: existing?._id || null,
+        normalizedSkipped: true,
+        legacyAppStateSkipped: true,
+        reason: `legacy appState payload exceeds ${MAX_LEGACY_APPSTATE_BYTES} bytes after compaction`,
+        bytes: dataBytes
+      };
+    }
+
     const patch = {
       key: args.key,
-      data: args.data,
+      data,
       updatedAt: Date.now()
     };
 
     if (existing) {
       await ctx.db.patch(existing._id, patch);
-      await syncNormalizedState(ctx, args.data);
-      return existing._id;
+      return {
+        id: existing._id,
+        normalizedSkipped: true,
+        legacyAppStateCompacted: data !== args.data,
+        bytes: dataBytes
+      };
     }
 
     const id = await ctx.db.insert("appState", patch);
-    await syncNormalizedState(ctx, args.data);
-    return id;
+    return {
+      id,
+      normalizedSkipped: true,
+      legacyAppStateCompacted: data !== args.data,
+      bytes: dataBytes
+    };
   }
 });

@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>KC Machines - Control de ventas</title>
-    <link rel="stylesheet" href="styles.css?v=20260605-machine-context">
+    <link rel="stylesheet" href="styles.css?v=20260624-convex-sync-fix">
   </head>
   <body>
     <main class="app-shell">
@@ -300,6 +300,7 @@
           </article>
         </section>
       </section>
+      <div class="sync-status" id="syncStatus" role="status" aria-live="polite" hidden></div>
       <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
       <dialog class="slot-dialog" id="slotDialog" aria-labelledby="slotDialogTitle">
@@ -332,6 +333,6 @@
 
     </main>
     <script src="convex-config.js?v=20260601-convex-sync"></script>
-    <script src="script.js?v=20260605-machine-context"></script>
+    <script src="script.js?v=20260624-fase5-block-legacy-appstate-save"></script>
   </body>
 </html>
