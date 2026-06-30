@@ -2,7 +2,8 @@ const STORAGE_KEY = "kc-machines-v28-product-total";
 const SYNC_META_KEY = `${STORAGE_KEY}-sync-meta`;
 const LOCAL_BACKUPS_KEY = `${STORAGE_KEY}-local-backups`;
 const PENDING_VISIT_SYNC_KEY = `${STORAGE_KEY}-pending-visit-sync`;
-const APP_BUILD_VERSION = "20260624-fase5-block-legacy-appstate-save";
+const PENDING_CLOSURE_SYNC_KEY = `${STORAGE_KEY}-pending-closure-sync`;
+const APP_BUILD_VERSION = "20260630-remote-closures-merge";
 const EMPTY_PRODUCT = "EMPTY";
 const CONVEX_URL = String(window.KC_CONVEX_URL || "").trim().replace(/\/$/, "");
 const LEGACY_APPSTATE_SAVE_ENABLED = false;
@@ -223,6 +224,7 @@ function saveLocalBackup(reason) {
 
 function hasPendingSync() {
   if (hasPendingVisitSync()) return true;
+  if (hasPendingClosureSync()) return true;
   if (!LEGACY_APPSTATE_SAVE_ENABLED) return false;
   return Number(syncMeta.pendingUpdatedAt || 0) > Number(syncMeta.syncedUpdatedAt || 0);
 }
@@ -237,6 +239,19 @@ function pendingVisitSyncPayload() {
 
 function hasPendingVisitSync() {
   return Boolean(pendingVisitSyncPayload()?.visit);
+}
+
+function pendingClosureSyncPayload() {
+  try {
+    return JSON.parse(localStorage.getItem(PENDING_CLOSURE_SYNC_KEY)) || null;
+  } catch {
+    return null;
+  }
+}
+
+function hasPendingClosureSync() {
+  const payload = pendingClosureSyncPayload();
+  return Boolean(payload?.monthClosure || payload?.yearClosure);
 }
 
 function renderSyncStatus(options = {}) {
@@ -353,6 +368,27 @@ function shouldKeepLocalState(remoteState) {
   if (!localHasData) return false;
 
   return Number(state.updatedAt || 0) > Number(normalizedRemote.updatedAt || 0);
+}
+
+function mergeMissingRemoteClosures(remoteState) {
+  const normalizedRemote = normalizeState(remoteState);
+  const closureKey = (item) => `${item.machineId || ""}:${item.month || ""}`;
+  const yearKeyForClosure = (item) => `${item.machineId || ""}:${item.year || item.month || ""}`;
+  const localMonthKeys = new Set((state.monthClosures || []).map(closureKey));
+  const localYearKeys = new Set((state.yearClosures || []).map(yearKeyForClosure));
+  const missingMonthClosures = (normalizedRemote.monthClosures || [])
+    .filter((closure) => closure.machineId && closure.month && !localMonthKeys.has(closureKey(closure)));
+  const missingYearClosures = (normalizedRemote.yearClosures || [])
+    .filter((closure) => closure.machineId && (closure.year || closure.month) && !localYearKeys.has(yearKeyForClosure(closure)));
+
+  if (!missingMonthClosures.length && !missingYearClosures.length) return false;
+
+  saveLocalBackup("before-remote-closures-merge");
+  state.monthClosures = [...(state.monthClosures || []), ...missingMonthClosures];
+  state.yearClosures = [...(state.yearClosures || []), ...missingYearClosures];
+  state.updatedAt = Math.max(Number(state.updatedAt || 0), Number(normalizedRemote.updatedAt || 0));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(compactStateForStorage(state)));
+  return true;
 }
 
 function applyRemoteState(remoteState) {
@@ -479,10 +515,58 @@ function remoteUpdatedAtFromBootstrap(bootstrap, visitsByMachine) {
     ...(bootstrap?.productos || []),
     ...(bootstrap?.maquinaProductos || []),
     ...(bootstrap?.matrizVisual || []),
+    ...(bootstrap?.cierresMensuales || []),
+    ...(bootstrap?.cierresAnuales || []),
     ...Object.values(visitsByMachine || {}).flat()
   ].flatMap((item) => [Number(item.updatedAt || 0), Number(item.closedAt || 0), Number(item.createdAt || 0)]);
 
   return Math.max(0, ...appStateUpdatedAt, ...entityUpdatedAt);
+}
+
+function mergeLegacyClosures(normalizedState, legacyState) {
+  const normalized = normalizeState(normalizedState);
+  const legacy = normalizeState(legacyState || {});
+  const machineIds = new Set(normalized.machines.map((machine) => machine.id));
+  const closureKey = (item) => `${item.machineId || ""}:${item.month || ""}`;
+  const yearKeyForClosure = (item) => `${item.machineId || ""}:${item.year || item.month || ""}`;
+  const monthKeys = new Set(normalized.monthClosures.map(closureKey));
+  const yearKeys = new Set(normalized.yearClosures.map(yearKeyForClosure));
+  const legacyMonthClosures = legacy.monthClosures
+    .filter((closure) => closure.month && machineIds.has(closure.machineId) && !monthKeys.has(closureKey(closure)));
+  const legacyYearClosures = legacy.yearClosures
+    .filter((closure) => (closure.year || closure.month) && machineIds.has(closure.machineId) && !yearKeys.has(yearKeyForClosure(closure)));
+
+  if (!legacyMonthClosures.length && !legacyYearClosures.length) return normalized;
+
+  return normalizeState({
+    ...normalized,
+    monthClosures: [...normalized.monthClosures, ...legacyMonthClosures],
+    yearClosures: [...normalized.yearClosures, ...legacyYearClosures],
+    updatedAt: Math.max(Number(normalized.updatedAt || 0), Number(legacy.updatedAt || 0))
+  });
+}
+
+function normalizedBootstrapMonthClosures(bootstrap) {
+  return (bootstrap?.cierresMensuales || [])
+    .map((closure) => ({
+      ...(closure.data || {}),
+      machineId: closure.idMaquina || closure.data?.machineId || null,
+      month: closure.mes || closure.data?.month || null,
+      closedAt: closure.data?.closedAt || closure.closedAt || null
+    }))
+    .filter((closure) => closure.machineId && closure.month);
+}
+
+function normalizedBootstrapYearClosures(bootstrap) {
+  return (bootstrap?.cierresAnuales || [])
+    .map((closure) => ({
+      ...(closure.data || {}),
+      machineId: closure.idMaquina || closure.data?.machineId || null,
+      year: closure.anio || closure.data?.year || closure.data?.month || null,
+      month: closure.anio || closure.data?.month || closure.data?.year || null,
+      closedAt: closure.data?.closedAt || closure.closedAt || null
+    }))
+    .filter((closure) => closure.machineId && (closure.year || closure.month));
 }
 
 async function loadNormalizedStateFromConvex() {
@@ -526,10 +610,10 @@ async function loadNormalizedStateFromConvex() {
     return records;
   }));
 
-  return normalizeState({
+  const normalizedState = normalizeState({
     records: detailLists.flat().sort((a, b) => String(a.date).localeCompare(String(b.date))),
-    monthClosures: [],
-    yearClosures: [],
+    monthClosures: normalizedBootstrapMonthClosures(bootstrap),
+    yearClosures: normalizedBootstrapYearClosures(bootstrap),
     machines,
     activeMachineId,
     globalSettings: defaultGlobalSettings,
@@ -537,6 +621,14 @@ async function loadNormalizedStateFromConvex() {
     products: normalizedProducts,
     updatedAt: remoteUpdatedAtFromBootstrap(bootstrap, visitsByMachine)
   });
+
+  try {
+    const legacyState = await loadLegacyStateFromConvex();
+    return mergeLegacyClosures(normalizedState, legacyState);
+  } catch (legacyError) {
+    console.warn("Convex legacy closures merge skipped", legacyError);
+    return normalizedState;
+  }
 }
 
 async function loadLegacyStateFromConvex() {
@@ -564,6 +656,14 @@ async function loadStateFromConvex() {
     }
 
     if (shouldKeepLocalState(remoteState)) {
+      const mergedClosures = mergeMissingRemoteClosures(remoteState);
+      if (mergedClosures) {
+        syncProductCatalog();
+        loadDate(visitDate.value);
+        renderSyncStatus();
+        showToast("Cierres remotos agregados a este navegador");
+        return;
+      }
       console.info("Legacy appState upload skipped for newer local state.");
       showToast("Datos locales conservados; appState legacy no se subio");
       return;
@@ -633,6 +733,25 @@ function saveVisitToConvex(payload) {
   return convexRequest("mutation", "appState:saveVisit", payload.visit);
 }
 
+function saveMonthClosureToConvex(closure) {
+  if (!CONVEX_URL || !closure?.machineId || !closure?.month) return Promise.resolve();
+  return convexRequest("mutation", "appState:saveMonthClosure", {
+    idMaquina: closure.machineId,
+    mes: closure.month,
+    data: closure
+  });
+}
+
+function saveYearClosureToConvex(closure) {
+  const year = closure?.year || closure?.month;
+  if (!CONVEX_URL || !closure?.machineId || !year) return Promise.resolve();
+  return convexRequest("mutation", "appState:saveYearClosure", {
+    idMaquina: closure.machineId,
+    anio: year,
+    data: closure
+  });
+}
+
 function flushVisitSync() {
   const payload = pendingVisitSyncPayload();
   if (!CONVEX_URL || !payload?.visit) {
@@ -655,6 +774,42 @@ function flushVisitSync() {
     })
     .catch((error) => {
       console.warn("Convex visit save failed", error);
+      rememberSyncFailure(error);
+      scheduleConvexRetry();
+      throw error;
+    })
+    .finally(() => {
+      convexSaveInFlight = null;
+      renderSyncStatus();
+    });
+
+  return convexSaveInFlight;
+}
+
+function flushClosureSync() {
+  const payload = pendingClosureSyncPayload();
+  if (!CONVEX_URL || (!payload?.monthClosure && !payload?.yearClosure)) {
+    renderSyncStatus();
+    return Promise.resolve();
+  }
+  if (convexSaveInFlight) return convexSaveInFlight;
+
+  clearTimeout(convexSaveTimer);
+  clearTimeout(convexRetryTimer);
+  syncMeta.lastAttemptAt = Date.now();
+  saveSyncMeta();
+  renderSyncStatus();
+
+  convexSaveInFlight = Promise.resolve()
+    .then(() => payload.monthClosure ? saveMonthClosureToConvex(payload.monthClosure) : null)
+    .then(() => payload.yearClosure ? saveYearClosureToConvex(payload.yearClosure) : null)
+    .then((result) => {
+      localStorage.removeItem(PENDING_CLOSURE_SYNC_KEY);
+      markSyncConfirmed(payload.updatedAt, { normalizedSynced: true });
+      return result;
+    })
+    .catch((error) => {
+      console.warn("Convex closure save failed", error);
       rememberSyncFailure(error);
       scheduleConvexRetry();
       throw error;
@@ -707,6 +862,7 @@ function flushConvexSave() {
 
 function flushPendingSync() {
   if (hasPendingVisitSync()) return flushVisitSync();
+  if (hasPendingClosureSync()) return flushClosureSync();
   if (LEGACY_APPSTATE_SAVE_ENABLED) return flushConvexSave();
   renderSyncStatus();
   return Promise.resolve({ legacyAppStateSkipped: true });
@@ -721,6 +877,19 @@ function queueVisitSave(record, delay = 400) {
   clearTimeout(convexSaveTimer);
   convexSaveTimer = setTimeout(() => {
     flushVisitSync().catch(() => {});
+  }, delay);
+}
+
+function queueClosureSave(payload, delay = 400) {
+  if (!CONVEX_URL || (!payload?.monthClosure && !payload?.yearClosure)) return;
+  localStorage.setItem(PENDING_CLOSURE_SYNC_KEY, JSON.stringify({
+    updatedAt: Number(state.updatedAt || Date.now()),
+    ...payload
+  }));
+  markSyncPending();
+  clearTimeout(convexSaveTimer);
+  convexSaveTimer = setTimeout(() => {
+    flushClosureSync().catch(() => {});
   }, delay);
 }
 
@@ -3755,6 +3924,7 @@ function finalizeMonthClosure() {
     grossProfit: summary.grossProfit,
     openingStockNextMonth: recordNextStock(closingRecord)
   };
+  let savedYearClosure = null;
   const existingIndex = state.monthClosures.findIndex((item) => item.month === selectedMonth && (!item.machineId || item.machineId === activeMachine()?.id));
 
   if (existingIndex >= 0) {
@@ -3798,12 +3968,17 @@ function finalizeMonthClosure() {
     } else {
       state.yearClosures.push(yearClosure);
     }
+    savedYearClosure = yearClosure;
 
     state.monthClosures = state.monthClosures.filter((item) => item.machineId !== activeMachine()?.id || yearKey(item.month) !== closedYear);
     state.records = state.records.filter((item) => item.machineId !== activeMachine()?.id || yearKey(item.date) !== closedYear);
   }
 
   saveState();
+  queueClosureSave({
+    monthClosure: savedYearClosure ? null : closure,
+    yearClosure: savedYearClosure
+  });
   visitDate.value = firstDayNextMonth(visitDate.value);
   activeMonthCard = null;
   expandedSalesCard = null;
@@ -4177,6 +4352,7 @@ requestPersistentStorage();
 renderSyncStatus();
 if (hasPendingSync()) {
   if (hasPendingVisitSync()) flushVisitSync().catch(() => {});
+  else if (hasPendingClosureSync()) flushClosureSync().catch(() => {});
   else queueConvexSave(0);
 }
 loadDate(visitDate.value);

@@ -5,6 +5,7 @@ const EMPTY_PRODUCT = "EMPTY";
 const defaultRowSizes = [5, 5, 10, 10, 10, 10];
 const rowLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 const MAX_LEGACY_APPSTATE_BYTES = 700_000;
+const DEFAULT_APPSTATE_KEY = "kc-machines-v28-product-total";
 
 function productId(productName) {
   return String(productName || "").trim().toUpperCase();
@@ -291,10 +292,98 @@ async function deleteVisitBundle(ctx, idVisita) {
 async function deleteMachineBundle(ctx, idMaquina) {
   await deleteByMachine(ctx, "maquina_productos", idMaquina);
   await deleteByMachine(ctx, "matriz_visual", idMaquina);
+  await deleteByMachine(ctx, "cierres_mensuales", idMaquina);
+  await deleteByMachine(ctx, "cierres_anuales", idMaquina);
   const visits = await ctx.db.query("visitas").withIndex("by_maquina", (q) => q.eq("idMaquina", idMaquina)).collect();
   for (const visit of visits) {
     await deleteVisitBundle(ctx, visit.idVisita);
     await ctx.db.delete(visit._id);
+  }
+}
+
+function normalizeMonthlyClosure(closure, idMaquinaFallback = "") {
+  const idMaquina = String(closure?.machineId || closure?.idMaquina || idMaquinaFallback || "");
+  const mes = String(closure?.month || closure?.mes || "");
+  return {
+    idMaquina,
+    mes,
+    data: {
+      ...closure,
+      machineId: idMaquina,
+      month: mes
+    },
+    closedAt: String(closure?.closedAt || "")
+  };
+}
+
+function normalizeYearClosure(closure, idMaquinaFallback = "") {
+  const idMaquina = String(closure?.machineId || closure?.idMaquina || idMaquinaFallback || "");
+  const anio = String(closure?.year || closure?.month || closure?.anio || "");
+  return {
+    idMaquina,
+    anio,
+    data: {
+      ...closure,
+      machineId: idMaquina,
+      year: anio,
+      month: anio
+    },
+    closedAt: String(closure?.closedAt || "")
+  };
+}
+
+async function syncClosuresForMachine(ctx, appState, idMaquina, now) {
+  const monthlyClosures = (appState?.monthClosures || [])
+    .map((closure) => normalizeMonthlyClosure(closure, idMaquina))
+    .filter((closure) => closure.idMaquina === idMaquina && closure.mes);
+  const yearlyClosures = (appState?.yearClosures || [])
+    .map((closure) => normalizeYearClosure(closure, idMaquina))
+    .filter((closure) => closure.idMaquina === idMaquina && closure.anio);
+
+  const nextMonthlyIds = new Set(monthlyClosures.map((closure) => `${closure.idMaquina}:${closure.mes}`));
+  const existingMonthly = await ctx.db.query("cierres_mensuales").withIndex("by_maquina", (q) => q.eq("idMaquina", idMaquina)).collect();
+  await Promise.all(existingMonthly
+    .filter((closure) => !nextMonthlyIds.has(closure.idCierreMensual))
+    .map((closure) => ctx.db.delete(closure._id)));
+
+  for (const closure of monthlyClosures) {
+    await upsertByIndex(
+      ctx,
+      "cierres_mensuales",
+      "by_maquina_mes",
+      (q) => q.eq("idMaquina", closure.idMaquina).eq("mes", closure.mes),
+      {
+        idCierreMensual: `${closure.idMaquina}:${closure.mes}`,
+        idMaquina: closure.idMaquina,
+        mes: closure.mes,
+        data: closure.data,
+        closedAt: closure.closedAt,
+        updatedAt: now
+      }
+    );
+  }
+
+  const nextYearlyIds = new Set(yearlyClosures.map((closure) => `${closure.idMaquina}:${closure.anio}`));
+  const existingYearly = await ctx.db.query("cierres_anuales").withIndex("by_maquina", (q) => q.eq("idMaquina", idMaquina)).collect();
+  await Promise.all(existingYearly
+    .filter((closure) => !nextYearlyIds.has(closure.idCierreAnual))
+    .map((closure) => ctx.db.delete(closure._id)));
+
+  for (const closure of yearlyClosures) {
+    await upsertByIndex(
+      ctx,
+      "cierres_anuales",
+      "by_maquina_anio",
+      (q) => q.eq("idMaquina", closure.idMaquina).eq("anio", closure.anio),
+      {
+        idCierreAnual: `${closure.idMaquina}:${closure.anio}`,
+        idMaquina: closure.idMaquina,
+        anio: closure.anio,
+        data: closure.data,
+        closedAt: closure.closedAt,
+        updatedAt: now
+      }
+    );
   }
 }
 
@@ -457,6 +546,7 @@ async function syncNormalizedState(ctx, appState) {
   if (!activeMachineId) return;
 
   await syncVisitsForMachine(ctx, appState, activeMachineId, productsById, now);
+  await syncClosuresForMachine(ctx, appState, activeMachineId, now);
 }
 
 export const get = query({
@@ -481,7 +571,9 @@ export const normalizedCounts = query({
     maquinaProductos: (await ctx.db.query("maquina_productos").collect()).length,
     matrizVisual: (await ctx.db.query("matriz_visual").collect()).length,
     visitas: (await ctx.db.query("visitas").collect()).length,
-    detalleVisita: (await ctx.db.query("detalle_visita").collect()).length
+    detalleVisita: (await ctx.db.query("detalle_visita").collect()).length,
+    cierresMensuales: (await ctx.db.query("cierres_mensuales").collect()).length,
+    cierresAnuales: (await ctx.db.query("cierres_anuales").collect()).length
   })
 });
 
@@ -494,6 +586,8 @@ export const getBootstrap = query({
       productos: await ctx.db.query("productos").collect(),
       maquinaProductos: await ctx.db.query("maquina_productos").collect(),
       matrizVisual: await ctx.db.query("matriz_visual").collect(),
+      cierresMensuales: await ctx.db.query("cierres_mensuales").collect(),
+      cierresAnuales: await ctx.db.query("cierres_anuales").collect(),
       metadata: {
         appState: appStateRows.map((row) => ({
           key: row.key,
@@ -505,7 +599,9 @@ export const getBootstrap = query({
           maquinaProductos: (await ctx.db.query("maquina_productos").collect()).length,
           matrizVisual: (await ctx.db.query("matriz_visual").collect()).length,
           visitas: (await ctx.db.query("visitas").collect()).length,
-          detalleVisita: (await ctx.db.query("detalle_visita").collect()).length
+          detalleVisita: (await ctx.db.query("detalle_visita").collect()).length,
+          cierresMensuales: (await ctx.db.query("cierres_mensuales").collect()).length,
+          cierresAnuales: (await ctx.db.query("cierres_anuales").collect()).length
         }
       }
     };
@@ -598,6 +694,135 @@ export const saveVisit = mutation({
       idVisita,
       details: normalizedVisitDetails(args.visitDetails).length,
       matrixUpdated: matrixEntriesFromArgs(args).length
+    };
+  }
+});
+
+export const saveMonthClosure = mutation({
+  args: {
+    idMaquina: v.string(),
+    mes: v.string(),
+    data: v.any()
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const closure = normalizeMonthlyClosure(args.data, args.idMaquina);
+    if (!closure.idMaquina || !closure.mes) {
+      throw new Error("Cierre mensual sin maquina o mes");
+    }
+
+    await upsertByIndex(
+      ctx,
+      "cierres_mensuales",
+      "by_maquina_mes",
+      (q) => q.eq("idMaquina", closure.idMaquina).eq("mes", closure.mes),
+      {
+        idCierreMensual: `${closure.idMaquina}:${closure.mes}`,
+        idMaquina: closure.idMaquina,
+        mes: closure.mes,
+        data: closure.data,
+        closedAt: closure.closedAt,
+        updatedAt: now
+      }
+    );
+
+    return {
+      idCierreMensual: `${closure.idMaquina}:${closure.mes}`,
+      updatedAt: now
+    };
+  }
+});
+
+export const saveYearClosure = mutation({
+  args: {
+    idMaquina: v.string(),
+    anio: v.string(),
+    data: v.any()
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const closure = normalizeYearClosure(args.data, args.idMaquina);
+    if (!closure.idMaquina || !closure.anio) {
+      throw new Error("Cierre anual sin maquina o anio");
+    }
+
+    await upsertByIndex(
+      ctx,
+      "cierres_anuales",
+      "by_maquina_anio",
+      (q) => q.eq("idMaquina", closure.idMaquina).eq("anio", closure.anio),
+      {
+        idCierreAnual: `${closure.idMaquina}:${closure.anio}`,
+        idMaquina: closure.idMaquina,
+        anio: closure.anio,
+        data: closure.data,
+        closedAt: closure.closedAt,
+        updatedAt: now
+      }
+    );
+
+    return {
+      idCierreAnual: `${closure.idMaquina}:${closure.anio}`,
+      updatedAt: now
+    };
+  }
+});
+
+export const migrateLegacyClosures = mutation({
+  args: {
+    key: v.optional(v.string())
+  },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("appState")
+      .withIndex("by_key", (q) => q.eq("key", args.key || DEFAULT_APPSTATE_KEY))
+      .unique();
+    const appState = row?.data || {};
+    const now = Date.now();
+    const monthlyClosures = (appState.monthClosures || [])
+      .map((closure) => normalizeMonthlyClosure(closure))
+      .filter((closure) => closure.idMaquina && closure.mes);
+    const yearlyClosures = (appState.yearClosures || [])
+      .map((closure) => normalizeYearClosure(closure))
+      .filter((closure) => closure.idMaquina && closure.anio);
+
+    for (const closure of monthlyClosures) {
+      await upsertByIndex(
+        ctx,
+        "cierres_mensuales",
+        "by_maquina_mes",
+        (q) => q.eq("idMaquina", closure.idMaquina).eq("mes", closure.mes),
+        {
+          idCierreMensual: `${closure.idMaquina}:${closure.mes}`,
+          idMaquina: closure.idMaquina,
+          mes: closure.mes,
+          data: closure.data,
+          closedAt: closure.closedAt,
+          updatedAt: now
+        }
+      );
+    }
+
+    for (const closure of yearlyClosures) {
+      await upsertByIndex(
+        ctx,
+        "cierres_anuales",
+        "by_maquina_anio",
+        (q) => q.eq("idMaquina", closure.idMaquina).eq("anio", closure.anio),
+        {
+          idCierreAnual: `${closure.idMaquina}:${closure.anio}`,
+          idMaquina: closure.idMaquina,
+          anio: closure.anio,
+          data: closure.data,
+          closedAt: closure.closedAt,
+          updatedAt: now
+        }
+      );
+    }
+
+    return {
+      migratedMonthClosures: monthlyClosures.length,
+      migratedYearClosures: yearlyClosures.length
     };
   }
 });

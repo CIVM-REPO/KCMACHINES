@@ -88,5 +88,27 @@ export default defineSchema({
     createdAt: v.number()
   }).index("by_visita", ["idVisita"])
     .index("by_maquina", ["idMaquina"])
-    .index("by_maquina_producto", ["idMaquina", "idProducto"])
+    .index("by_maquina_producto", ["idMaquina", "idProducto"]),
+
+  cierres_mensuales: defineTable({
+    idCierreMensual: v.string(),
+    idMaquina: v.string(),
+    mes: v.string(),
+    data: v.any(),
+    closedAt: v.string(),
+    updatedAt: v.number()
+  }).index("by_idCierreMensual", ["idCierreMensual"])
+    .index("by_maquina", ["idMaquina"])
+    .index("by_maquina_mes", ["idMaquina", "mes"]),
+
+  cierres_anuales: defineTable({
+    idCierreAnual: v.string(),
+    idMaquina: v.string(),
+    anio: v.string(),
+    data: v.any(),
+    closedAt: v.string(),
+    updatedAt: v.number()
+  }).index("by_idCierreAnual", ["idCierreAnual"])
+    .index("by_maquina", ["idMaquina"])
+    .index("by_maquina_anio", ["idMaquina", "anio"])
 });
